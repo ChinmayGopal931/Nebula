@@ -1,0 +1,36 @@
+# Dependencies
+**/node_modules/
+
+# Build artifacts
+anchor/target/
+fe/.next/
+
+# Test artifacts
+anchor/test-ledger/
+.anchor/test-ledger/
+
+# Anchor local validator data
+anchor/.anchor/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+._*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Symlinks
+scripts/node_modules
+
+# ZK artifacts (large binary files)
+artifacts/*.wasm
+artifacts/*.zkey
+

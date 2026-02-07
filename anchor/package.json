@@ -1,0 +1,30 @@
+{
+  "license": "ISC",
+  "scripts": {
+    "test": "anchor test -- --features localnet",
+    "test:phase2": "bash scripts/test-phase2.sh",
+    "devnet:setup": "ANCHOR_PROVIDER_URL=https://api.devnet.solana.com ANCHOR_WALLET=~/.config/solana/id.json yarn run ts-mocha -p ./tsconfig.json -t 1000000 scripts/devnet-setup.ts",
+    "test:devnet": "ANCHOR_PROVIDER_URL=https://api.devnet.solana.com ANCHOR_WALLET=~/.config/solana/id.json yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/phase2_devnet.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.0",
+    "@solana/spl-token": "^0.4.14",
+    "circomlib": "^2.0.5",
+    "ffjavascript": "^0.3.1"
+  },
+  "devDependencies": {
+    "@ethersproject/sha2": "^5.8.0",
+    "@lightprotocol/hasher.rs": "^0.2.1",
+    "@types/bn.js": "^5.1.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^9.0.0",
+    "bn.js": "^5.2.2",
+    "borsh": "^2.0.0",
+    "chai": "^4.3.4",
+    "ethers": "^6.13.7",
+    "mocha": "^9.0.3",
+    "snarkjs": "^0.7.5",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "privacyYieldProgram": "5S7PQfffWm4uYMg62Zsjzp2BZgTQSVFj8cmoNBRggwWw",
+  "mockKlendProgram": "CcubA6KJKRuBV1GBbXxeu9rNwv6UeVLZfCvfs6LqBZfk",
+  "usdcMint": "fAdUukCWZcNkuxs1ZgJ44tCBdHFFdsy8q31jsKvzLFx",
+  "usdcMintKeypair": "5f251UTRVCWc9D4DbTpjsYkjEczv8TaEmQwmLogDp8x3ofCkoxY6HkmgTxgya9ZhHiFEtsVp8qnmyBEowwesrPVp",
+  "lendingMarket": "H2YdcUtXJk4aqd4NGkLQiTGbdBEmU1fR5TAbCvmsLc3t",
+  "lendingMarketKeypair": "2mmArZMxgcCFzP879XiZwBm5j3dSSHBhpQTmGuffCSDF4i3dzGday47bMPA1XYPfknfGREP6HMQj4xC5aM6Wn6SN",
+  "reserve": "AUWXJLxT54PycdYXtvKSpREGy1NRzshrWqKhtfYQp8bz",
+  "reserveKeypair": "5geLjP7u3SACrorgLkHWsTokhPrd6FWVYCNe9R6UtzzjAG4YxWvXYKLegz4jLGzeFa5W5wCbYH4hFDdaB7umcgV6",
+  "lendingMarketAuthority": "J2sxBRiVPGc2AbEYXyiqqKStUWHHFaG41uzg9ytjZBbR",
+  "reserveLiquiditySupply": "CbZwfur2u54Zozs4PWoxtJRja552BBhmTciUuVdnSCc9",
+  "reserveCollateralMint": "8VMn3ACdnrdxnBmVoRTJMzs9s4gsFLWQsb9DeuN7Jygo",
+  "reserveCollateralSupply": "8kKX6Vo2YB6HnaaaMBGddhbVMbs2zbHZAUZjQDSMHvdY",
+  "feeReceiver": "Hk5pT372pmc3xAmBCKgG3Tnfk1LVwP33ezoYNVhaEQkS",
+  "treeAccountPDA": "3rUxvp1QDCWhxCEf2j1KenusPKdSEbuTMjqpfDKUR7YN",
+  "poolConfigPDA": "DWq7V5PDuoow7frxVDt8mFYu5uTLGvy1uguXrMxTNAt4",
+  "klendConfigPDA": "ENto1q6tDXDuuCMkpb4stANASXHtRHTiRKYBGVnFb7C1",
+  "poolVault": "6PZW2bE4oWqR5Cr54rZmJPBEkf5ApUftNshsf9j1hAoH",
+  "poolCtokenAccount": "GeBVUQoajGmnvzVZpggV8JydbXveEpyVPBPuGwWm9WpX"
+}

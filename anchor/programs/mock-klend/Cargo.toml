@@ -1,0 +1,22 @@
+[package]
+name = "mock-klend"
+version = "0.1.0"
+description = "Mock Klend program for localnet testing (1:1 cToken exchange)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mock_klend"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+localnet = []
+
+[dependencies]
+anchor-lang = "0.31.0"
+anchor-spl = "0.31.0"
