@@ -9,30 +9,33 @@ export function UTXOList() {
 
   if (unspent.length === 0) {
     return (
-      <div className="text-sm text-muted py-8 text-center">
-        No notes yet. Deposit USDC to create your first private note.
+      <div className="text-xs text-muted py-6 text-center">
+        no notes yet. deposit USDC to create your first private note.
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      {unspent.map((utxo) => (
+    <div className="space-y-1">
+      {unspent.map((utxo, i) => (
         <div
           key={utxo.id}
-          className="flex items-center justify-between border border-border px-4 py-3 bg-surface-0"
+          className="flex items-center justify-between px-3 py-2 bg-surface-0 border border-border text-xs"
         >
-          <div>
-            <span className="text-base font-mono">
+          <div className="flex items-center gap-3">
+            <span className="text-muted">
+              {String(i).padStart(2, "0")}
+            </span>
+            <span className="text-white">
               {formatUSDC(parseInt(utxo.amount))} USDC
             </span>
-            <span className="text-xs text-muted ml-3">
+            <span className="text-muted">
               #{utxo.index}
             </span>
           </div>
-          <div className="text-xs text-muted font-mono">
+          <span className="text-muted">
             {shortenAddress(utxo.id, 6)}
-          </div>
+          </span>
         </div>
       ))}
     </div>

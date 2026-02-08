@@ -2,68 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: "Alliance No.2";
-  src: url("/fonts/AllianceNo2-Regular.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 body {
   background-color: #0a0a0a;
-  color: #fafafa;
+  color: #b4b4b4;
+  font-family: var(--font-mono), ui-monospace, monospace;
 }
 
-/* Wallet adapter overrides */
+/* Wallet adapter overrides — terminal style */
 .wallet-adapter-button {
-  font-family: "Alliance No.2", system-ui, sans-serif !important;
-  background-color: #141414 !important;
-  border: 1px solid #262626 !important;
-  border-radius: 4px !important;
-  font-size: 14px !important;
-  height: 40px !important;
+  font-family: var(--font-mono), ui-monospace, monospace !important;
+  background-color: transparent !important;
+  border: 1px solid #1e1e1e !important;
+  border-radius: 0 !important;
+  font-size: 13px !important;
+  height: 36px !important;
+  letter-spacing: 0.02em !important;
 }
 
 .wallet-adapter-button:hover {
-  background-color: #1a1a1a !important;
+  background-color: #111111 !important;
   border-color: #333333 !important;
 }
 
 .wallet-adapter-button-trigger {
-  background-color: #10b981 !important;
+  background-color: #d65d0e !important;
   border: none !important;
   color: #0a0a0a !important;
   font-weight: 500 !important;
 }
 
 .wallet-adapter-button-trigger:hover {
-  background-color: #059669 !important;
+  background-color: #e87040 !important;
 }
 
 .wallet-adapter-modal-wrapper {
-  background-color: #141414 !important;
-  border: 1px solid #262626 !important;
-  border-radius: 8px !important;
-  font-family: "Alliance No.2", system-ui, sans-serif !important;
+  background-color: #111111 !important;
+  border: 1px solid #1e1e1e !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono), ui-monospace, monospace !important;
 }
 
 .wallet-adapter-modal-title {
-  color: #fafafa !important;
+  color: #b4b4b4 !important;
 }
 
 .wallet-adapter-modal-list li {
-  background-color: #1a1a1a !important;
-  border: 1px solid #262626 !important;
+  background-color: #0a0a0a !important;
+  border: 1px solid #1e1e1e !important;
+  border-radius: 0 !important;
 }
 
 .wallet-adapter-modal-list li:hover {
-  border-color: #333333 !important;
+  border-color: #d65d0e !important;
 }
 
-/* Scrollbar */
+/* Scrollbar — thin terminal style */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -72,5 +67,34 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #333333;
-  border-radius: 3px;
+}
+
+/* Remove number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Custom select dropdown */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23585858' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px !important;
+}
+
+select option {
+  background-color: #0a0a0a;
+  color: #b4b4b4;
+  padding: 8px;
+}
+
+/* Selection */
+::selection {
+  background-color: #d65d0e;
+  color: #0a0a0a;
 }

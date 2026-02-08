@@ -18,8 +18,8 @@ export function DepositForm() {
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm text-muted mb-1.5">
-            Amount (USDC)
+          <label className="block text-xs text-muted mb-2">
+            {">"} amount (USDC)
           </label>
           <div className="relative">
             <input
@@ -29,10 +29,10 @@ export function DepositForm() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full bg-surface-0 border border-border px-4 py-3 text-lg font-mono focus:outline-none focus:border-border-hover placeholder:text-muted/40"
+              className="w-full bg-surface-0 border border-border px-4 py-3 text-lg text-white focus:outline-none focus:border-accent placeholder:text-muted/30"
               disabled={step !== "idle"}
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted">
               USDC
             </span>
           </div>
@@ -45,9 +45,9 @@ export function DepositForm() {
             parseFloat(amount) <= 0 ||
             step !== "idle"
           }
-          className="w-full py-3 text-sm font-medium bg-accent text-surface-0 hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-full py-3 text-xs bg-accent text-surface-0 hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
-          Deposit
+          [ execute deposit ]
         </button>
       </form>
 

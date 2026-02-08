@@ -5,23 +5,38 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Alliance No.2", "system-ui", "sans-serif"],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        mono: [
+          "var(--font-mono)",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Consolas",
+          "monospace",
+        ],
       },
       colors: {
         surface: {
           0: "#0a0a0a",
-          1: "#141414",
+          1: "#111111",
           2: "#1a1a1a",
           3: "#222222",
         },
         border: {
-          DEFAULT: "#262626",
+          DEFAULT: "#1e1e1e",
           hover: "#333333",
         },
-        muted: "#71717a",
-        accent: "#10b981",
-        "accent-hover": "#059669",
+        muted: "#585858",
+        accent: "#d65d0e",
+        "accent-hover": "#e87040",
+      },
+      keyframes: {
+        blink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+      },
+      animation: {
+        blink: "blink 1s step-end infinite",
       },
     },
   },

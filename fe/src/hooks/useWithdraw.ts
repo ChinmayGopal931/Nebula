@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAnchorWallet } from "@solana/wallet-adapter-react";
-import { AnchorProvider } from "@coral-xyz/anchor";
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -11,16 +10,11 @@ import {
 import { PublicKey, Transaction } from "@solana/web3.js";
 import BN from "bn.js";
 
-import { USDC_MINT } from "@/lib/config";
+import { USDC_MINT, RELAYER_URL, RELAYER_PUBKEY } from "@/lib/config";
 import { Utxo } from "@/lib/utxo";
 import { Keypair } from "@/lib/keypair";
 import { parseUSDC } from "@/lib/utils";
-import {
-  getProgram,
-  getOrCreateALT,
-  buildProofInput,
-  buildTransactVersionedTx,
-} from "@/lib/transaction";
+import { buildProofInput } from "@/lib/transaction";
 import { useUTXOStore, StoredUTXO } from "@/stores/utxo-store";
 import { useTreeStore } from "@/stores/tree-store";
 import { useWasm } from "./useWasm";
@@ -29,7 +23,7 @@ export type WithdrawStep =
   | "idle"
   | "preparing"
   | "proving"
-  | "signing"
+  | "relaying"
   | "confirming"
   | "done"
   | "error";
@@ -44,6 +38,35 @@ interface WithdrawState {
     recipientAddress?: string
   ) => Promise<void>;
   reset: () => void;
+}
+
+async function pollRelayerStatus(
+  requestId: string,
+  signal?: AbortSignal
+): Promise<{ status: string; txSignature?: string; error?: string }> {
+  const POLL_INTERVAL = 5000;
+  const MAX_POLLS = 120; // 10 minutes max
+
+  for (let i = 0; i < MAX_POLLS; i++) {
+    if (signal?.aborted) throw new Error("Polling aborted");
+
+    const res = await fetch(`${RELAYER_URL}/status/${requestId}`);
+    if (!res.ok) throw new Error("Failed to check relayer status");
+
+    const data = await res.json();
+
+    if (data.status === "confirmed") {
+      return { status: "confirmed", txSignature: data.txSignature };
+    }
+    if (data.status === "failed") {
+      return { status: "failed", error: data.error || "Relayer submission failed" };
+    }
+
+    // Still queued or submitting — wait and retry
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+  }
+
+  throw new Error("Relayer polling timed out");
 }
 
 export function useWithdraw(): WithdrawState {
@@ -153,7 +176,7 @@ export function useWithdraw(): WithdrawState {
           }
         }
 
-        // Build proof
+        // Build proof with relayer as feeRecipient
         setStep("proving");
         const proofResult = await buildProofInput({
           inputs: [
@@ -165,56 +188,43 @@ export function useWithdraw(): WithdrawState {
           extAmount: new BN(-withdrawAmount),
           fee: new BN(0),
           recipient: recipientTokenAccount,
-          feeRecipient: publicKey,
+          feeRecipient: RELAYER_PUBKEY,
         });
 
-        // Create ALT if needed
-        setStep("signing");
-        const signAndSend = async (tx: Transaction) => {
-          const sig = await sendTransaction(tx, connection);
-          await connection.confirmTransaction(sig, "confirmed");
-          return sig;
-        };
-        const altAddress = await getOrCreateALT(
-          connection,
-          publicKey,
-          signAndSend
-        );
-
-        // Build versioned transaction
-        const signerTokenAccount = await getAssociatedTokenAddress(
-          USDC_MINT,
-          publicKey
-        );
-        const provider = new AnchorProvider(connection, wallet, {
-          commitment: "confirmed",
+        // Send to relayer
+        setStep("relaying");
+        const relayerRes = await fetch(`${RELAYER_URL}/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            proof: proofResult.proofToSubmit,
+            extDataMinified: {
+              extAmount: proofResult.extData.extAmount.toString(),
+              fee: proofResult.extData.fee.toString(),
+            },
+            encryptedOutput1: Array.from(proofResult.extData.encryptedOutput1),
+            encryptedOutput2: Array.from(proofResult.extData.encryptedOutput2),
+            recipientPubkey: recipientPubkey.toBase58(),
+            recipientTokenAccount: recipientTokenAccount.toBase58(),
+          }),
         });
-        const program = getProgram(provider);
 
-        const versionedTx = await buildTransactVersionedTx(
-          connection,
-          program,
-          proofResult,
-          publicKey,
-          signerTokenAccount,
-          recipientPubkey,
-          recipientTokenAccount,
-          altAddress
-        );
+        if (!relayerRes.ok) {
+          const errData = await relayerRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Relayer returned ${relayerRes.status}`);
+        }
 
-        // Send
-        const signature = await sendTransaction(versionedTx, connection);
+        const { requestId } = await relayerRes.json();
+
+        // Poll for completion
         setStep("confirming");
+        const result = await pollRelayerStatus(requestId);
 
-        const latestBlockhash = await connection.getLatestBlockhash();
-        await connection.confirmTransaction(
-          {
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            signature,
-          },
-          "confirmed"
-        );
+        if (result.status === "failed") {
+          throw new Error(result.error || "Relayer submission failed");
+        }
+
+        const signature = result.txSignature!;
 
         // Update local state
         insertCommitments(proofResult.outputCommitments);

@@ -4,6 +4,21 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { WalletButton } from "@/components/WalletButton";
+import { DecipherText } from "@/components/DecipherText";
+
+const ASCII_ART = `
+        ▄▄██████████▄▄
+      ▄██▀▀        ▀▀██▄
+     ██    ╔══════╗    ██
+     ██    ║ ┌──┐ ║    ██
+     ██    ║ │▓▓│ ║    ██
+     ██    ║ └─┬┘ ║    ██
+     ██    ╠═══╧══╣    ██
+     ██    ║ ░░░░ ║    ██
+     ██    ║ ░░░░ ║    ██
+     ██    ╚══════╝    ██
+      ▀██▄          ▄██▀
+        ▀▀██████████▀▀`;
 
 export default function Home() {
   const { connected } = useWallet();
@@ -18,76 +33,94 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-8 py-5 border-b border-border">
-        <span className="text-sm font-medium tracking-wide">
-          Privacy Yield
+      <nav className="flex items-center justify-between px-8 py-4 border-b border-border">
+        <span className="text-sm text-accent tracking-wider">
+          NEBULA
         </span>
-        <WalletButton />
+        <div className="flex items-center gap-6">
+          <span className="text-xs text-muted hidden sm:inline">
+            [devnet]
+          </span>
+          <WalletButton />
+        </div>
       </nav>
 
       {/* Hero */}
       <main className="flex-1 flex flex-col items-center justify-center px-4">
-        <div className="max-w-lg text-center">
-          <h1 className="text-4xl font-medium mb-4 tracking-tight">
-            Private Yield on Solana
-          </h1>
-          <p className="text-muted text-lg mb-12 leading-relaxed">
-            Deposit USDC privately, earn yield, withdraw anywhere.
-            All proof generation happens in your browser.
-          </p>
+        <div className="max-w-3xl w-full flex flex-col md:flex-row items-center gap-10 md:gap-16">
+          {/* ASCII Art */}
+          <div className="hidden md:block shrink-0">
+            <pre className="text-[11px] leading-[1.3] text-muted select-none">
+              {ASCII_ART}
+            </pre>
+          </div>
 
-          {!connected && (
-            <div className="inline-block">
-              <WalletButton />
-            </div>
-          )}
+          {/* Text */}
+          <div className="text-center md:text-left">
+            <h1 className="text-2xl md:text-3xl text-white mb-4 leading-tight">
+              <DecipherText text="Private yield on Solana." delay={300} speed={25} />
+            </h1>
+            <p className="text-sm text-muted mb-8 leading-relaxed max-w-md">
+              <DecipherText
+                text="Deposit USDC privately. Earn yield via Kamino. Withdraw to any address. All proofs generated in your browser."
+                delay={1200}
+                speed={12}
+              />
+            </p>
+
+            {!connected && (
+              <div className="inline-block">
+                <WalletButton />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* How it works */}
-        <div className="mt-20 max-w-2xl w-full">
-          <div className="grid grid-cols-3 gap-6">
-            <div className="border border-border p-6 bg-surface-1">
-              <div className="text-xs text-muted uppercase tracking-wide mb-3">
-                01
+        <div className="mt-20 max-w-3xl w-full">
+          <div className="text-xs text-muted mb-4 uppercase tracking-widest">
+            {"// how it works"}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border">
+            {[
+              {
+                num: "01",
+                title: "DEPOSIT",
+                desc: "Generate a ZK proof in your browser. Your deposit is shielded from observers.",
+              },
+              {
+                num: "02",
+                title: "EARN",
+                desc: "Pool funds deploy to Kamino lending. Your share earns yield while private.",
+              },
+              {
+                num: "03",
+                title: "WITHDRAW",
+                desc: "Withdraw to any Solana address. No link between deposit and withdrawal.",
+              },
+            ].map((item) => (
+              <div
+                key={item.num}
+                className="bg-surface-0 p-6"
+              >
+                <div className="text-accent text-xs mb-3">
+                  [{item.num}]
+                </div>
+                <div className="text-white text-sm mb-2">
+                  {item.title}
+                </div>
+                <p className="text-xs text-muted leading-relaxed">
+                  {item.desc}
+                </p>
               </div>
-              <h3 className="text-sm font-medium mb-2">
-                Deposit Privately
-              </h3>
-              <p className="text-xs text-muted leading-relaxed">
-                Generate a ZK proof in your browser. Your deposit amount is
-                shielded from on-chain observers.
-              </p>
-            </div>
-            <div className="border border-border p-6 bg-surface-1">
-              <div className="text-xs text-muted uppercase tracking-wide mb-3">
-                02
-              </div>
-              <h3 className="text-sm font-medium mb-2">Earn Yield</h3>
-              <p className="text-xs text-muted leading-relaxed">
-                Pool funds are deployed to Kamino lending. Your share earns
-                interest while remaining private.
-              </p>
-            </div>
-            <div className="border border-border p-6 bg-surface-1">
-              <div className="text-xs text-muted uppercase tracking-wide mb-3">
-                03
-              </div>
-              <h3 className="text-sm font-medium mb-2">
-                Withdraw Anywhere
-              </h3>
-              <p className="text-xs text-muted leading-relaxed">
-                Withdraw to any Solana address. No one can link your
-                withdrawal to your deposit.
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="px-8 py-5 border-t border-border text-xs text-muted flex items-center justify-between">
-        <span>Devnet</span>
-        <span>ZK + MPC on Solana</span>
+      <footer className="px-8 py-4 border-t border-border text-xs text-muted">
+        <span>{process.env.NEXT_PUBLIC_COMMIT_HASH || "dev"}</span>
       </footer>
     </div>
   );

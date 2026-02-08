@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
+import { JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
 
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
+
 export const metadata: Metadata = {
-  title: "Privacy Yield",
+  title: "Nebula",
   description: "Private yield on Solana",
 };
 
@@ -13,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased min-h-screen">
+    <html lang="en" className={mono.variable}>
+      <body className="font-mono antialiased min-h-screen">
         <Providers>{children}</Providers>
       </body>
     </html>

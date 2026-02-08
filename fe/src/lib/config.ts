@@ -45,3 +45,11 @@ export const RESERVE_LIQUIDITY_SUPPLY = new PublicKey(
 export const RESERVE_COLLATERAL_MINT = new PublicKey(
   "8VMn3ACdnrdxnBmVoRTJMzs9s4gsFLWQsb9DeuN7Jygo"
 );
+
+// Relayer config
+export const RELAYER_URL =
+  process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3001";
+export const RELAYER_PUBKEY = new PublicKey(
+  process.env.NEXT_PUBLIC_RELAYER_PUBKEY ||
+    "11111111111111111111111111111111" // placeholder — set in .env.local
+);

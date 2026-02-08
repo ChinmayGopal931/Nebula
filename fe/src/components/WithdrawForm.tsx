@@ -39,8 +39,8 @@ export function WithdrawForm() {
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm text-muted mb-1.5">
-            Select Note
+          <label className="block text-xs text-muted mb-2">
+            {">"} select note
           </label>
           <select
             value={selectedUtxo}
@@ -48,10 +48,10 @@ export function WithdrawForm() {
               setSelectedUtxo(e.target.value);
               setAmount("");
             }}
-            className="w-full bg-surface-0 border border-border px-4 py-3 text-sm focus:outline-none focus:border-border-hover appearance-none cursor-pointer"
+            className="w-full bg-surface-0 border border-border px-4 py-3 text-sm text-white focus:outline-none focus:border-accent appearance-none cursor-pointer"
             disabled={step !== "idle"}
           >
-            <option value="">Choose a note...</option>
+            <option value="">-- select --</option>
             {unspentUtxos.map((u) => (
               <option key={u.id} value={u.id}>
                 {formatUSDC(parseInt(u.amount))} USDC
@@ -61,16 +61,18 @@ export function WithdrawForm() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-sm text-muted">Amount (USDC)</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-muted">
+              {">"} amount (USDC)
+            </label>
             {selectedUtxoData && (
               <button
                 type="button"
                 onClick={() => setAmount(maxAmount.toString())}
-                className="text-xs text-accent hover:underline"
+                className="text-xs text-accent hover:text-accent-hover transition-colors"
                 disabled={step !== "idle"}
               >
-                Max: {maxAmount.toFixed(2)}
+                max: {maxAmount.toFixed(2)}
               </button>
             )}
           </div>
@@ -83,10 +85,10 @@ export function WithdrawForm() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full bg-surface-0 border border-border px-4 py-3 text-lg font-mono focus:outline-none focus:border-border-hover placeholder:text-muted/40"
+              className="w-full bg-surface-0 border border-border px-4 py-3 text-lg text-white focus:outline-none focus:border-accent placeholder:text-muted/30"
               disabled={!selectedUtxo || step !== "idle"}
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted">
               USDC
             </span>
           </div>
@@ -96,19 +98,19 @@ export function WithdrawForm() {
           <button
             type="button"
             onClick={() => setShowRecipient(!showRecipient)}
-            className="text-xs text-muted hover:text-white transition-colors"
+            className="text-xs text-muted hover:text-accent transition-colors"
           >
             {showRecipient
-              ? "- Hide recipient"
-              : "+ Custom recipient"}
+              ? "- hide recipient"
+              : "+ custom recipient"}
           </button>
           {showRecipient && (
             <input
               type="text"
               value={recipientAddress}
               onChange={(e) => setRecipientAddress(e.target.value)}
-              placeholder="Solana address (default: your wallet)"
-              className="mt-2 w-full bg-surface-0 border border-border px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-border-hover placeholder:text-muted/40"
+              placeholder="solana address (default: your wallet)"
+              className="mt-2 w-full bg-surface-0 border border-border px-4 py-2.5 text-xs text-white focus:outline-none focus:border-accent placeholder:text-muted/30"
               disabled={step !== "idle"}
             />
           )}
@@ -123,9 +125,9 @@ export function WithdrawForm() {
             parseFloat(amount) > maxAmount ||
             step !== "idle"
           }
-          className="w-full py-3 text-sm font-medium bg-accent text-surface-0 hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-full py-3 text-xs bg-accent text-surface-0 hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
-          Withdraw
+          [ execute withdraw ]
         </button>
       </form>
 

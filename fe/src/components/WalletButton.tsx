@@ -11,14 +11,14 @@ export function WalletButton() {
   if (connected && publicKey) {
     return (
       <div className="flex items-center gap-3">
-        <span className="text-sm text-muted font-mono">
+        <span className="text-xs text-muted">
           {shortenAddress(publicKey.toBase58())}
         </span>
         <button
           onClick={() => disconnect()}
-          className="px-4 py-2 text-sm bg-surface-1 border border-border hover:border-border-hover transition-colors"
+          className="px-3 py-1.5 text-xs border border-border hover:border-accent hover:text-accent transition-colors"
         >
-          Disconnect
+          disconnect
         </button>
       </div>
     );
@@ -27,9 +27,9 @@ export function WalletButton() {
   return (
     <button
       onClick={() => setVisible(true)}
-      className="px-6 py-2.5 text-sm font-medium bg-accent text-surface-0 hover:bg-accent-hover transition-colors"
+      className="px-4 py-2 text-xs bg-accent text-surface-0 hover:bg-accent-hover transition-colors"
     >
-      Connect Wallet
+      connect wallet
     </button>
   );
 }
