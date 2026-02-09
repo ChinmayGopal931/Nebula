@@ -732,7 +732,7 @@ export default function DocsPage() {
             </div>
 
             {/* Terminal body */}
-            <div className="bg-[#080808] p-6 min-h-[520px] max-h-[700px] overflow-y-auto font-mono">
+            <div className="bg-[#080808] p-4 sm:p-6 min-h-[520px] max-h-[80vh] overflow-y-auto overflow-x-hidden font-mono">
               {/* ASCII art */}
               <pre
                 className="font-['Courier_New',_Courier,_monospace] font-bold leading-[1em] tracking-normal whitespace-pre overflow-x-auto select-none text-accent/70 mb-4 text-[9px] sm:text-[11px] [font-smooth:never] [-webkit-font-smoothing:none]"
@@ -745,7 +745,7 @@ export default function DocsPage() {
                 {ASCII_DOCS.join("\n")}
               </pre>
 
-              <div className="text-border text-xs mb-4 select-none">
+              <div className="text-border text-xs mb-4 select-none overflow-hidden">
                 {"─".repeat(60)}
               </div>
 

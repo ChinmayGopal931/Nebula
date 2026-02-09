@@ -49,7 +49,7 @@ export function PoolDashboard() {
   return (
     <div className="max-w-2xl mx-auto px-4">
       {/* System status */}
-      <div className="flex items-center gap-6 mb-8 text-xs">
+      <div className="flex items-center flex-wrap gap-x-6 gap-y-1 mb-8 text-xs">
         <span className="text-muted">sys</span>
         <span className={isSyncing ? "text-yellow-400" : "text-green-500"}>
           {isSyncing

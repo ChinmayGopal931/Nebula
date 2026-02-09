@@ -117,7 +117,7 @@ export function ProofStatus({
           <div className="bg-[#080808] p-5 min-h-[200px] max-h-[400px] overflow-y-auto font-mono">
             {/* Header */}
             <div className="text-xs text-accent mb-3">initiating private transaction</div>
-            <div className="text-border text-xs mb-3 select-none">
+            <div className="text-border text-xs mb-3 select-none overflow-hidden">
               {"─".repeat(50)}
             </div>
 

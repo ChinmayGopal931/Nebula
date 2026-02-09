@@ -8,7 +8,7 @@ export default function PoolPage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-border">
+      <nav className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-border">
         <Link href="/" className="text-sm text-accent tracking-wider hover:text-accent/80 transition-colors">
           PLASMA
         </Link>
@@ -21,7 +21,7 @@ export default function PoolPage() {
       </main>
 
       {/* Footer */}
-      <footer className="flex items-center justify-between px-8 py-4 border-t border-border text-xs text-muted">
+      <footer className="flex items-center justify-between flex-wrap gap-2 px-4 sm:px-8 py-4 border-t border-border text-xs text-muted">
         <span>{process.env.NEXT_PUBLIC_COMMIT_HASH || "dev"}</span>
         <div className="flex items-center gap-4">
           <a
