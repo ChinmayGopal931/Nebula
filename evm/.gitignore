@@ -3,3 +3,5 @@ artifacts/
 cache/
 typechain-types/
 yarn.lock
+.env
+deployments/

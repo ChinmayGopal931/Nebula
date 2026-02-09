@@ -305,9 +305,9 @@ describe("Phase 2: Yield Vault Integration", () => {
   });
 
   // =====================================================
-  // Test 8: Bundled deposit — transact(deposit) + yieldDeposit
+  // Test 8: Auto-yield deposit — transact auto-sweeps to vault
   // =====================================================
-  it("8. bundled deposit — transact + yieldDeposit in sequence", async () => {
+  it("8. auto-yield deposit — transact auto-sweeps USDC to vault", async () => {
     // Clean state: redeem any remaining
     const poolAddress = await pool.getAddress();
     if ((await vault.balanceOf(poolAddress)) > 0n) {
@@ -339,26 +339,30 @@ describe("Phase 2: Yield Vault Integration", () => {
       keyBasePath,
     });
 
-    // Execute deposit then sweep to vault
+    // transact() auto-sweeps to vault — no manual yieldDeposit needed
     await (await callTransact(pool, user, proofResult)).wait();
-    await pool.yieldDeposit();
 
     for (const c of proofResult.outputCommitments) merkleTree.insert(c);
     depositUtxo = outputs[0];
 
-    // Verify: pool USDC should be 0, yTokens increased
+    // Verify: pool USDC should be 0 (auto-swept), yTokens increased
     expect(await usdc.balanceOf(poolAddress)).to.equal(0n);
     const yTokensAfter = await vault.balanceOf(poolAddress);
     expect(yTokensAfter).to.be.greaterThan(yTokensBefore);
   });
 
   // =====================================================
-  // Test 9: Bundled withdrawal — yieldRedeem + transact(withdraw)
+  // Test 9: Auto-yield withdrawal — transact auto-redeems from vault
   // =====================================================
-  it("9. bundled withdrawal — yieldRedeem + transact in sequence", async () => {
+  it("9. auto-yield withdrawal — transact auto-redeems then sweeps remainder", async () => {
     const withdrawAmount = 500_000; // 0.5 USDC
     const tokenAddress = await usdc.getAddress();
+    const poolAddress = await pool.getAddress();
     const recipientBalanceBefore = await usdc.balanceOf(recipient.address);
+
+    // Confirm USDC is in vault (from test 8 auto-sweep)
+    expect(await vault.balanceOf(poolAddress)).to.be.greaterThan(0n);
+    expect(await usdc.balanceOf(poolAddress)).to.equal(0n);
 
     const changeAmount = depositUtxo.amount.toNumber() - withdrawAmount;
     const inputs = [
@@ -379,8 +383,7 @@ describe("Phase 2: Yield Vault Integration", () => {
       keyBasePath,
     });
 
-    // Redeem from vault first, then withdraw
-    await pool.yieldRedeem();
+    // transact() auto-redeems from vault and auto-sweeps remainder — no manual calls
     await (await callTransact(pool, user, proofResult)).wait();
 
     for (const c of proofResult.outputCommitments) merkleTree.insert(c);
@@ -389,23 +392,25 @@ describe("Phase 2: Yield Vault Integration", () => {
     const recipientBalanceAfter = await usdc.balanceOf(recipient.address);
     expect(recipientBalanceAfter - recipientBalanceBefore).to.equal(BigInt(withdrawAmount));
 
-    // yTokens should be zero (fully redeemed)
-    const poolAddress = await pool.getAddress();
-    expect(await vault.balanceOf(poolAddress)).to.equal(0n);
+    // Pool USDC should be 0 (remainder swept back to vault)
+    expect(await usdc.balanceOf(poolAddress)).to.equal(0n);
+    // Remaining USDC (change) should be in vault as yTokens
+    expect(await vault.balanceOf(poolAddress)).to.be.greaterThan(0n);
   });
 
   // =====================================================
-  // Test 10: Round-trip — deposit bundle → withdrawal bundle
+  // Test 10: Round-trip — auto-yield deposit → auto-yield withdrawal
   // =====================================================
-  it("10. round-trip — deposit bundle then withdrawal bundle", async () => {
+  it("10. round-trip — auto-yield handles deposit and withdrawal", async () => {
     const depositAmount = 2_000_000; // 2 USDC
     const tokenAddress = await usdc.getAddress();
     const poolAddress = await pool.getAddress();
 
     const userBalanceBefore = await usdc.balanceOf(user.address);
     const recipientBalanceBefore = await usdc.balanceOf(recipient.address);
+    const yTokensBeforeRoundTrip = await vault.balanceOf(poolAddress);
 
-    // === Deposit Bundle ===
+    // === Deposit (auto-sweeps to vault) ===
     const depInputs = [new Utxo({ lightWasm, tokenAddress }), new Utxo({ lightWasm, tokenAddress })];
     const depOutputs = [
       new Utxo({ lightWasm, amount: depositAmount, keypair: sharedKeypair, index: merkleTree._layers[0].length, tokenAddress }),
@@ -421,18 +426,20 @@ describe("Phase 2: Yield Vault Integration", () => {
       keyBasePath,
     });
 
+    // No manual yieldDeposit — transact auto-sweeps
     await (await callTransact(pool, user, depResult)).wait();
-    await pool.yieldDeposit();
 
     for (const c of depResult.outputCommitments) merkleTree.insert(c);
     const roundTripUtxo = depOutputs[0];
 
-    // Verify deposit
+    // Verify: user paid, USDC in vault (auto-swept)
     const userBalanceAfterDeposit = await usdc.balanceOf(user.address);
     expect(userBalanceBefore - userBalanceAfterDeposit).to.equal(BigInt(depositAmount));
-    expect(await vault.balanceOf(poolAddress)).to.be.greaterThan(0n);
+    expect(await usdc.balanceOf(poolAddress)).to.equal(0n);
+    const yTokensAfterDeposit = await vault.balanceOf(poolAddress);
+    expect(yTokensAfterDeposit - yTokensBeforeRoundTrip).to.equal(BigInt(depositAmount));
 
-    // === Withdrawal Bundle ===
+    // === Withdrawal (auto-redeems from vault) ===
     const wdInputs = [roundTripUtxo, new Utxo({ lightWasm, tokenAddress })];
     const wdOutputs = [new Utxo({ lightWasm, amount: 0, tokenAddress }), new Utxo({ lightWasm, amount: 0, tokenAddress })];
 
@@ -445,7 +452,7 @@ describe("Phase 2: Yield Vault Integration", () => {
       keyBasePath,
     });
 
-    await pool.yieldRedeem();
+    // No manual yieldRedeem — transact auto-redeems
     await (await callTransact(pool, user, wdResult)).wait();
 
     for (const c of wdResult.outputCommitments) merkleTree.insert(c);
@@ -454,8 +461,11 @@ describe("Phase 2: Yield Vault Integration", () => {
     const recipientBalanceAfter = await usdc.balanceOf(recipient.address);
     expect(recipientBalanceAfter - recipientBalanceBefore).to.equal(BigInt(depositAmount));
 
-    // yTokens should be zero
-    expect(await vault.balanceOf(poolAddress)).to.equal(0n);
+    // Pool USDC should be 0 (remainder swept back to vault)
+    expect(await usdc.balanceOf(poolAddress)).to.equal(0n);
+    // Vault balance should be back to pre-round-trip level (deposited then fully withdrawn)
+    const yTokensAfterRoundTrip = await vault.balanceOf(poolAddress);
+    expect(yTokensAfterRoundTrip).to.equal(yTokensBeforeRoundTrip);
   });
 
   // TODO: devnet tests deferred

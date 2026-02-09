@@ -1,27 +1,30 @@
 "use client";
 
-import { useMemo, ReactNode } from "react";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets";
-import { DEVNET_RPC } from "@/lib/config";
+import { ReactNode } from "react";
+import { WagmiProvider } from "wagmi";
+import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { wagmiConfig } from "@/lib/config";
 import { WasmProvider } from "@/hooks/useWasm";
 
-import "@solana/wallet-adapter-react-ui/styles.css";
+import "@rainbow-me/rainbowkit/styles.css";
+
+const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: ReactNode }) {
-  const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
-
   return (
-    <ConnectionProvider endpoint={DEVNET_RPC}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={darkTheme({
+            accentColor: "#d65d0e",
+            accentColorForeground: "#0a0a0a",
+            borderRadius: "none",
+          })}
+        >
           <WasmProvider>{children}</WasmProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }

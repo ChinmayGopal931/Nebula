@@ -1,7 +1,6 @@
 import BN from "bn.js";
 import { Keypair } from "./keypair";
 import { LightWasm } from "@lightprotocol/hasher.rs";
-import { PublicKey } from "@solana/web3.js";
 import { getMintAddressField } from "./utils";
 
 export class Utxo {
@@ -10,7 +9,7 @@ export class Utxo {
   blinding: BN;
   keypair: Keypair;
   index: number;
-  mintAddress: string;
+  tokenAddress: string;
 
   constructor({
     lightWasm,
@@ -18,14 +17,14 @@ export class Utxo {
     keypair,
     blinding,
     index = 0,
-    mintAddress,
+    tokenAddress,
   }: {
     lightWasm: LightWasm;
     amount?: BN | number | string;
     keypair?: Keypair;
     blinding?: BN | number | string;
     index?: number;
-    mintAddress?: string;
+    tokenAddress?: string;
   }) {
     this.lightWasm = lightWasm;
     this.amount = new BN(amount.toString());
@@ -41,18 +40,18 @@ export class Utxo {
 
     this.keypair = keypair || Keypair.generateNew(this.lightWasm);
     this.index = index;
-    this.mintAddress = mintAddress || "11111111111111111111111111111112";
+    // Default token address for EVM (matches EVM test lib)
+    this.tokenAddress =
+      tokenAddress || "0x0000000000000000000000000000000000000001";
   }
 
   async getCommitment(): Promise<string> {
-    const mintAddressField = getMintAddressField(
-      new PublicKey(this.mintAddress)
-    );
+    const mintField = getMintAddressField(this.tokenAddress);
     return this.lightWasm.poseidonHashString([
       this.amount.toString(),
       this.keypair.pubkey.toString(),
       this.blinding.toString(),
-      mintAddressField,
+      mintField,
     ]);
   }
 

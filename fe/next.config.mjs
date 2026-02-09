@@ -10,7 +10,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_COMMIT_HASH: commitHash,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -23,6 +23,15 @@ const nextConfig = {
         worker_threads: false,
       };
     }
+    // Suppress warnings from packages that try to require optional/platform-specific deps
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^pino-pretty$/,
+      }),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^@react-native-async-storage\/async-storage$/,
+      })
+    );
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,

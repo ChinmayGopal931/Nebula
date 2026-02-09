@@ -1,137 +1,120 @@
 import BN from "bn.js";
-import { utils } from "ffjavascript";
-import * as borsh from "borsh";
-import { sha256 } from "@ethersproject/sha2";
-import { PublicKey } from "@solana/web3.js";
+import { keccak256 } from "viem";
+import { FIELD_SIZE } from "./constants";
 
-export function bnToBytes(bn: BN): number[] {
-  return Array.from(
-    (utils as any).leInt2Buff((utils as any).unstringifyBigInts(bn.toString()), 32)
-  ).reverse() as number[];
-}
-
+/**
+ * Compute extDataHash matching the Solidity contract:
+ *   uint256(keccak256(abi.encodePacked(recipient, extAmount, enc1, enc2, fee, feeRecipient, tokenAddress))) % FIELD_SIZE
+ */
 export function getExtDataHash(extData: {
-  recipient: string | PublicKey;
-  extAmount: string | number | BN;
-  encryptedOutput1?: string | Uint8Array;
-  encryptedOutput2?: string | Uint8Array;
-  fee: string | number | BN;
-  feeRecipient: string | PublicKey;
-  mintAddress: string | PublicKey;
-}): Uint8Array {
-  const recipient =
-    extData.recipient instanceof PublicKey
-      ? extData.recipient
-      : new PublicKey(extData.recipient);
-
-  const feeRecipient =
-    extData.feeRecipient instanceof PublicKey
-      ? extData.feeRecipient
-      : new PublicKey(extData.feeRecipient);
-
-  const mintAddress =
-    extData.mintAddress instanceof PublicKey
-      ? extData.mintAddress
-      : new PublicKey(extData.mintAddress);
-
+  recipient: string;
+  extAmount: BN | number | string;
+  encryptedOutput1?: Uint8Array;
+  encryptedOutput2?: Uint8Array;
+  fee: BN | number | string;
+  feeRecipient: string;
+  tokenAddress: string;
+}): string {
   const extAmount = new BN(extData.extAmount.toString());
   const fee = new BN(extData.fee.toString());
 
   const encryptedOutput1 = extData.encryptedOutput1
-    ? new Uint8Array(
-        typeof extData.encryptedOutput1 === "string"
-          ? new TextEncoder().encode(extData.encryptedOutput1)
-          : extData.encryptedOutput1
-      )
+    ? extData.encryptedOutput1
     : new Uint8Array(0);
-
   const encryptedOutput2 = extData.encryptedOutput2
-    ? new Uint8Array(
-        typeof extData.encryptedOutput2 === "string"
-          ? new TextEncoder().encode(extData.encryptedOutput2)
-          : extData.encryptedOutput2
-      )
+    ? extData.encryptedOutput2
     : new Uint8Array(0);
 
-  const schema = {
-    struct: {
-      recipient: { array: { type: "u8" as const, len: 32 } },
-      extAmount: "i64" as const,
-      encryptedOutput1: { array: { type: "u8" as const } },
-      encryptedOutput2: { array: { type: "u8" as const } },
-      fee: "u64" as const,
-      feeRecipient: { array: { type: "u8" as const, len: 32 } },
-      mintAddress: { array: { type: "u8" as const, len: 32 } },
-    },
-  };
+  // Convert extAmount (i64 equivalent) to int256 (32 bytes, two's complement)
+  const extAmountBytes = toInt256Bytes(extAmount);
+  // Convert fee (u64 equivalent) to uint256 (32 bytes)
+  const feeBytes = toUint256Bytes(fee);
 
-  const value = {
-    recipient: recipient.toBytes(),
-    extAmount,
-    encryptedOutput1,
-    encryptedOutput2,
-    fee,
-    feeRecipient: feeRecipient.toBytes(),
-    mintAddress: mintAddress.toBytes(),
-  };
+  // abi.encodePacked: address(20) + int256(32) + bytes + bytes + uint256(32) + address(20) + address(20)
+  const recipientBytes = hexToBytes(extData.recipient);
+  const feeRecipientBytes = hexToBytes(extData.feeRecipient);
+  const tokenAddressBytes = hexToBytes(extData.tokenAddress);
 
-  const serializedData = borsh.serialize(schema, value);
-  const hashHex = sha256(serializedData);
-  const hexStr = hashHex.startsWith("0x") ? hashHex.slice(2) : hashHex;
+  const totalLen =
+    20 + 32 + encryptedOutput1.length + encryptedOutput2.length + 32 + 20 + 20;
+  const packed = new Uint8Array(totalLen);
+  let offset = 0;
 
-  // Convert hex string to Uint8Array
-  const bytes = new Uint8Array(hexStr.length / 2);
-  for (let i = 0; i < hexStr.length; i += 2) {
-    bytes[i / 2] = parseInt(hexStr.substring(i, i + 2), 16);
+  packed.set(recipientBytes, offset);
+  offset += 20;
+  packed.set(extAmountBytes, offset);
+  offset += 32;
+  packed.set(encryptedOutput1, offset);
+  offset += encryptedOutput1.length;
+  packed.set(encryptedOutput2, offset);
+  offset += encryptedOutput2.length;
+  packed.set(feeBytes, offset);
+  offset += 32;
+  packed.set(feeRecipientBytes, offset);
+  offset += 20;
+  packed.set(tokenAddressBytes, offset);
+
+  const hashHex = keccak256(packed);
+  const hashBN = new BN(hashHex.slice(2), 16);
+  const reduced = hashBN.mod(FIELD_SIZE);
+
+  return reduced.toString();
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const cleaned = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(cleaned.length / 2);
+  for (let i = 0; i < cleaned.length; i += 2) {
+    bytes[i / 2] = parseInt(cleaned.substring(i, i + 2), 16);
   }
   return bytes;
 }
 
-export function getMintAddressField(mint: PublicKey): string {
-  const mintBytes = mint.toBytes();
-  return new BN(mintBytes.slice(0, 31), 16, "be").toString();
+function toInt256Bytes(value: BN): Uint8Array {
+  const buf = new Uint8Array(32);
+  if (value.isNeg()) {
+    // Two's complement: 2^256 + value
+    const twosComp = new BN(2).pow(new BN(256)).add(value);
+    const hex = twosComp.toString(16).padStart(64, "0");
+    const bytes = hexToBytes(hex);
+    buf.set(bytes);
+  } else {
+    const hex = value.toString(16).padStart(64, "0");
+    const bytes = hexToBytes(hex);
+    buf.set(bytes);
+  }
+  return buf;
 }
 
-export function findNullifierPDAs(
-  programId: PublicKey,
-  proof: { inputNullifiers: number[][] }
-) {
-  const [nullifier0PDA] = PublicKey.findProgramAddressSync(
-    [
-      new TextEncoder().encode("nullifier0"),
-      new Uint8Array(proof.inputNullifiers[0]),
-    ],
-    programId
-  );
-  const [nullifier1PDA] = PublicKey.findProgramAddressSync(
-    [
-      new TextEncoder().encode("nullifier1"),
-      new Uint8Array(proof.inputNullifiers[1]),
-    ],
-    programId
-  );
-  return { nullifier0PDA, nullifier1PDA };
+function toUint256Bytes(value: BN): Uint8Array {
+  const buf = new Uint8Array(32);
+  const hex = value.toString(16).padStart(64, "0");
+  const bytes = hexToBytes(hex);
+  buf.set(bytes);
+  return buf;
 }
 
-export function findCrossCheckNullifierPDAs(
-  programId: PublicKey,
-  proof: { inputNullifiers: number[][] }
-) {
-  const [nullifier2PDA] = PublicKey.findProgramAddressSync(
-    [
-      new TextEncoder().encode("nullifier0"),
-      new Uint8Array(proof.inputNullifiers[1]),
-    ],
-    programId
-  );
-  const [nullifier3PDA] = PublicKey.findProgramAddressSync(
-    [
-      new TextEncoder().encode("nullifier1"),
-      new Uint8Array(proof.inputNullifiers[0]),
-    ],
-    programId
-  );
-  return { nullifier2PDA, nullifier3PDA };
+/**
+ * Get the mint/token address field for Poseidon commitment.
+ * For EVM: use address as a BN (20 bytes / 160 bits — fits in BN254 field).
+ */
+export function getMintAddressField(tokenAddress: string): string {
+  const cleaned = tokenAddress.startsWith("0x")
+    ? tokenAddress.slice(2)
+    : tokenAddress;
+  const addrBN = new BN(cleaned, 16);
+  return addrBN.toString();
+}
+
+/**
+ * Convert public amount for circuit input.
+ * For withdrawals (negative), compute FIELD_SIZE - abs(amount).
+ */
+export function toPublicAmount(extAmount: BN): string {
+  if (extAmount.isNeg()) {
+    return FIELD_SIZE.sub(extAmount.neg()).toString();
+  }
+  return extAmount.toString();
 }
 
 export function formatUSDC(lamports: number | BN): string {
@@ -144,7 +127,7 @@ export function parseUSDC(usdcString: string): number {
 }
 
 export function shortenAddress(address: string, chars = 4): string {
-  return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+  return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 }
 
 export function shortenSignature(sig: string, chars = 8): string {

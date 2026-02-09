@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { usePoolBalance } from "@/hooks/usePoolBalance";
 import { useMerkleTree } from "@/hooks/useMerkleTree";
 import { useUTXOStore } from "@/stores/utxo-store";
@@ -17,12 +17,11 @@ type Tab = "deposit" | "withdraw";
 type Section = "notes" | "history";
 
 export function PoolDashboard() {
-  const { publicKey } = useWallet();
+  const { address } = useAccount();
   const {
     shieldedBalance,
     walletBalance,
     vaultBalance,
-    ctokenBalance,
     isLoading: balanceLoading,
   } = usePoolBalance();
   const { isSyncing, onChainLeafCount } = useMerkleTree();
@@ -33,10 +32,10 @@ export function PoolDashboard() {
   const [artifactsReady, setArtifactsReady] = useState(false);
 
   useEffect(() => {
-    if (publicKey) {
-      initUtxoStore(publicKey.toBase58());
+    if (address) {
+      initUtxoStore(address);
     }
-  }, [publicKey, initUtxoStore]);
+  }, [address, initUtxoStore]);
 
   useEffect(() => {
     preloadArtifacts().then(() => setArtifactsReady(true));
@@ -57,7 +56,7 @@ export function PoolDashboard() {
             ? `[SYNC] tree...`
             : `[OK] ${onChainLeafCount} leaves`}
         </span>
-        <span className="text-green-500">[OK] devnet</span>
+        <span className="text-green-500">[OK] megaeth-testnet</span>
       </div>
 
       {/* Balances */}
@@ -81,20 +80,13 @@ export function PoolDashboard() {
             <div className="text-xs text-muted mt-1">USDC (private)</div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-px bg-border">
+        <div className="grid grid-cols-1 gap-px bg-border">
           <div className="bg-surface-0 p-5">
             <div className="text-xs text-muted mb-2">pool_vault</div>
             <div className="text-lg text-white">
               {balanceLoading ? "..." : formatUSDC(vaultBalance)}
             </div>
             <div className="text-xs text-muted mt-1">USDC</div>
-          </div>
-          <div className="bg-surface-0 p-5">
-            <div className="text-xs text-muted mb-2">earning_yield</div>
-            <div className="text-lg text-white">
-              {balanceLoading ? "..." : formatUSDC(ctokenBalance)}
-            </div>
-            <div className="text-xs text-muted mt-1">cTokens</div>
           </div>
         </div>
       </div>

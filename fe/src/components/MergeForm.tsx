@@ -5,6 +5,7 @@ import { useMerge } from "@/hooks/useMerge";
 import { useUTXOStore } from "@/stores/utxo-store";
 import { formatUSDC } from "@/lib/utils";
 import { ProofStatus } from "./ProofStatus";
+import { Select } from "./Select";
 
 export function MergeForm() {
   const [utxoA, setUtxoA] = useState("");
@@ -35,42 +36,36 @@ export function MergeForm() {
           <label className="block text-sm text-muted mb-1.5">
             Note A
           </label>
-          <select
+          <Select
             value={utxoA}
-            onChange={(e) => setUtxoA(e.target.value)}
-            className="w-full bg-surface-0 border border-border px-4 py-3 text-sm focus:outline-none focus:border-border-hover appearance-none cursor-pointer"
-            disabled={step !== "idle"}
-          >
-            <option value="">Select note...</option>
-            {unspentUtxos
+            onChange={setUtxoA}
+            options={unspentUtxos
               .filter((u) => u.id !== utxoB)
-              .map((u) => (
-                <option key={u.id} value={u.id}>
-                  {formatUSDC(parseInt(u.amount))} USDC
-                </option>
-              ))}
-          </select>
+              .map((u) => ({
+                value: u.id,
+                label: `${formatUSDC(parseInt(u.amount))} USDC`,
+              }))}
+            placeholder="select note..."
+            disabled={step !== "idle"}
+          />
         </div>
 
         <div>
           <label className="block text-sm text-muted mb-1.5">
             Note B
           </label>
-          <select
+          <Select
             value={utxoB}
-            onChange={(e) => setUtxoB(e.target.value)}
-            className="w-full bg-surface-0 border border-border px-4 py-3 text-sm focus:outline-none focus:border-border-hover appearance-none cursor-pointer"
-            disabled={step !== "idle"}
-          >
-            <option value="">Select note...</option>
-            {unspentUtxos
+            onChange={setUtxoB}
+            options={unspentUtxos
               .filter((u) => u.id !== utxoA)
-              .map((u) => (
-                <option key={u.id} value={u.id}>
-                  {formatUSDC(parseInt(u.amount))} USDC
-                </option>
-              ))}
-          </select>
+              .map((u) => ({
+                value: u.id,
+                label: `${formatUSDC(parseInt(u.amount))} USDC`,
+              }))}
+            placeholder="select note..."
+            disabled={step !== "idle"}
+          />
         </div>
 
         {utxoA && utxoB && (

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useConnection } from "@solana/wallet-adapter-react";
+import { usePublicClient } from "wagmi";
 import { useTreeStore } from "@/stores/tree-store";
 import { useWasm } from "./useWasm";
 
 export function useMerkleTree() {
-  const { connection } = useConnection();
+  const publicClient = usePublicClient();
   const lightWasm = useWasm();
   const {
     tree,
@@ -18,10 +18,10 @@ export function useMerkleTree() {
   } = useTreeStore();
 
   useEffect(() => {
-    if (lightWasm && !tree && !isSyncing) {
-      syncFromChain(connection, lightWasm);
+    if (lightWasm && publicClient && !tree && !isSyncing) {
+      syncFromChain(publicClient, lightWasm);
     }
-  }, [lightWasm, tree, isSyncing, connection, syncFromChain]);
+  }, [lightWasm, publicClient, tree, isSyncing, syncFromChain]);
 
   return {
     tree,
@@ -29,8 +29,8 @@ export function useMerkleTree() {
     onChainLeafCount,
     error,
     resync: () => {
-      if (lightWasm) {
-        syncFromChain(connection, lightWasm);
+      if (lightWasm && publicClient) {
+        syncFromChain(publicClient, lightWasm);
       }
     },
     insertCommitments,

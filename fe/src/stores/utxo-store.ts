@@ -7,16 +7,16 @@ export interface StoredUTXO {
   blinding: string; // BN serialized
   keypairPrivkey: string; // hex string (ZK privkey)
   index: number; // merkle tree leaf index
-  mintAddress: string; // USDC mint base58
+  tokenAddress: string; // EVM token address
   spent: boolean;
   createdAt: number;
-  txSignature: string;
+  txHash: string; // EVM transaction hash
 }
 
 export interface TransactionRecord {
-  signature: string;
+  signature: string; // tx hash
   type: "deposit" | "withdraw" | "merge";
-  amount: number; // in USDC lamports
+  amount: number; // in USDC units (6 decimals)
   timestamp: number;
   utxoIds: string[]; // committed UTXOs
 }
@@ -37,7 +37,7 @@ interface UTXOState {
   clear: () => void;
 }
 
-const DB_NAME = "privacy-yield";
+const DB_NAME = "privacy-yield-evm";
 const DB_VERSION = 1;
 
 async function getDB(): Promise<IDBPDatabase> {

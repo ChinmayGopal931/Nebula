@@ -1,30 +1,49 @@
 "use client";
 
-type Step = "idle" | "preparing" | "proving" | "signing" | "relaying" | "confirming" | "done" | "error";
+import { useEffect, useState } from "react";
+import { megaethTestnet } from "@/lib/config";
 
-const stepLabels: Record<Step, string> = {
-  idle: "",
-  preparing: "preparing transaction...",
-  proving: "generating zk proof...",
-  signing: "waiting for wallet signature...",
-  relaying: "queued for batch submission...",
-  confirming: "confirming on solana...",
-  done: "transaction confirmed",
-  error: "transaction failed",
-};
+type Step = "idle" | "preparing" | "proving" | "signing" | "confirming" | "done" | "error";
 
-const stepDescriptions: Record<Step, string> = {
-  idle: "",
-  preparing: "building UTXOs and circuit inputs",
-  proving: "this may take 5-15 seconds",
-  signing: "please approve in your wallet",
-  relaying: "your withdrawal will be submitted with the next batch",
-  confirming: "waiting for block confirmation",
-  done: "",
-  error: "",
-};
+interface LogLine {
+  text: string;
+  style: string;
+}
 
-const SPINNER_FRAMES = ["|", "/", "-", "\\"];
+const STEP_ORDER: Step[] = ["preparing", "proving", "signing", "confirming", "done"];
+
+function getStepLines(step: Step): LogLine[] {
+  switch (step) {
+    case "preparing":
+      return [{ text: "building UTXOs and circuit inputs...", style: "text-muted" }];
+    case "proving":
+      return [
+        { text: "[OK] inputs prepared", style: "text-green-500" },
+        { text: "", style: "" },
+        { text: "generating groth16 proof (this may take 5-15s)...", style: "text-muted" },
+      ];
+    case "signing":
+      return [
+        { text: "[OK] proof generated", style: "text-green-500" },
+        { text: "", style: "" },
+        { text: "waiting for wallet signature...", style: "text-yellow-500" },
+        { text: "please approve the transaction in your wallet", style: "text-muted" },
+      ];
+    case "confirming":
+      return [
+        { text: "[OK] transaction signed", style: "text-green-500" },
+        { text: "", style: "" },
+        { text: "confirming on megaeth...", style: "text-muted" },
+      ];
+    case "done":
+      return [
+        { text: "[OK] transaction confirmed", style: "text-green-500" },
+        { text: "", style: "" },
+      ];
+    default:
+      return [];
+  }
+}
 
 export function ProofStatus({
   step,
@@ -37,67 +56,123 @@ export function ProofStatus({
   txSignature: string | null;
   onClose: () => void;
 }) {
+  const [logLines, setLogLines] = useState<LogLine[]>([]);
+  const [lastStep, setLastStep] = useState<Step>("idle");
+
+  // Accumulate log lines as steps progress
+  useEffect(() => {
+    if (step === "idle") {
+      setLogLines([]);
+      setLastStep("idle");
+      return;
+    }
+
+    if (step === lastStep) return;
+
+    // Find all steps between lastStep and current step
+    const lastIdx = STEP_ORDER.indexOf(lastStep);
+    const currIdx = STEP_ORDER.indexOf(step);
+
+    if (currIdx > lastIdx) {
+      const newLines: LogLine[] = [];
+      for (let i = Math.max(0, lastIdx + 1); i <= currIdx; i++) {
+        newLines.push(...getStepLines(STEP_ORDER[i]));
+      }
+      setLogLines((prev) => [...prev, ...newLines]);
+    }
+
+    // Handle error step
+    if (step === "error") {
+      setLogLines((prev) => [
+        ...prev,
+        { text: "", style: "" },
+        { text: "[ERR] transaction failed", style: "text-red-500" },
+      ]);
+    }
+
+    setLastStep(step);
+  }, [step, lastStep]);
+
   if (step === "idle") return null;
 
   const isActive = !["idle", "done", "error"].includes(step);
+  const explorerUrl = megaethTestnet.blockExplorers?.default?.url;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-surface-1 border border-border p-8 w-full max-w-md">
-        <div className="flex flex-col items-center text-center">
-          {isActive && (
-            <div className="mb-4 text-2xl text-accent animate-spin">
-              *
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+      <div className="w-full max-w-lg mx-4">
+        {/* Terminal window */}
+        <div className="border border-border">
+          {/* Title bar */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-surface-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+            <span className="ml-3 text-[10px] text-muted tracking-wider">
+              plasma — transaction
+            </span>
+          </div>
+
+          {/* Terminal body */}
+          <div className="bg-[#080808] p-5 min-h-[200px] max-h-[400px] overflow-y-auto font-mono">
+            {/* Header */}
+            <div className="text-xs text-accent mb-3">initiating private transaction</div>
+            <div className="text-border text-xs mb-3 select-none">
+              {"─".repeat(50)}
             </div>
-          )}
 
-          {step === "done" && (
-            <div className="mb-4 text-sm text-green-500">
-              [OK]
+            {/* Log lines */}
+            <div className="space-y-0.5">
+              {logLines.map((line, i) => {
+                if (line.text === "") return <div key={i} className="h-2.5" />;
+                return (
+                  <div key={i} className={`text-xs ${line.style}`}>
+                    {line.text}
+                  </div>
+                );
+              })}
             </div>
-          )}
 
-          {step === "error" && (
-            <div className="mb-4 text-sm text-red-500">
-              [ERR]
-            </div>
-          )}
+            {/* Blinking cursor for active state */}
+            {isActive && (
+              <span className="inline-block text-xs text-accent animate-pulse mt-1">
+                _
+              </span>
+            )}
 
-          <h3 className="text-sm text-white mb-1">
-            {stepLabels[step]}
-          </h3>
+            {/* Error detail */}
+            {error && (
+              <div className="text-xs text-red-400 mt-1 break-all">
+                {error.length > 200 ? error.slice(0, 200) + "..." : error}
+              </div>
+            )}
 
-          {stepDescriptions[step] && (
-            <p className="text-xs text-muted mb-4">
-              {stepDescriptions[step]}
-            </p>
-          )}
+            {/* Tx link */}
+            {txSignature && explorerUrl && (
+              <div className="mt-1">
+                <a
+                  href={`${explorerUrl}/tx/${txSignature}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-accent hover:text-accent-hover transition-colors"
+                >
+                  {">"} view on explorer: {txSignature.slice(0, 10)}...{txSignature.slice(-6)}
+                </a>
+              </div>
+            )}
 
-          {error && (
-            <p className="text-xs text-red-400 mb-4 break-all">
-              {error}
-            </p>
-          )}
-
-          {txSignature && (
-            <a
-              href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-accent hover:text-accent-hover mb-4 transition-colors"
-            >
-              {">"} view on explorer
-            </a>
-          )}
-
-          {(step === "done" || step === "error") && (
-            <button
-              onClick={onClose}
-              className="mt-2 px-4 py-2 text-xs border border-border hover:border-accent hover:text-accent transition-colors"
-            >
-              [ close ]
-            </button>
-          )}
+            {/* Close prompt */}
+            {(step === "done" || step === "error") && (
+              <div className="mt-3">
+                <button
+                  onClick={onClose}
+                  className="text-xs text-muted hover:text-accent transition-colors cursor-pointer"
+                >
+                  {">"} press to close_
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,22 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useAnchorWallet } from "@solana/wallet-adapter-react";
-import { AnchorProvider } from "@coral-xyz/anchor";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
-import { Transaction } from "@solana/web3.js";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import BN from "bn.js";
 
-import { USDC_MINT } from "@/lib/config";
+import { USDC_ADDRESS } from "@/lib/config";
 import { Utxo } from "@/lib/utxo";
 import { Keypair } from "@/lib/keypair";
-import {
-  getProgram,
-  getOrCreateALT,
-  buildProofInput,
-  buildTransactVersionedTx,
-} from "@/lib/transaction";
+import { buildProofInput, callTransact } from "@/lib/transaction";
 import { useUTXOStore, StoredUTXO } from "@/stores/utxo-store";
 import { useTreeStore } from "@/stores/tree-store";
 import { useWasm } from "./useWasm";
@@ -39,9 +30,9 @@ interface MergeState {
 }
 
 export function useMerge(): MergeState {
-  const { connection } = useConnection();
-  const wallet = useAnchorWallet();
-  const { sendTransaction, publicKey } = useWallet();
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const lightWasm = useWasm();
   const { tree, insertCommitments } = useTreeStore();
   const { utxos, addUTXO, markSpent, addTransaction } = useUTXOStore();
@@ -52,7 +43,7 @@ export function useMerge(): MergeState {
 
   const merge = useCallback(
     async (utxoIdA: string, utxoIdB: string) => {
-      if (!wallet || !publicKey || !lightWasm || !tree) {
+      if (!address || !publicClient || !walletClient || !lightWasm || !tree) {
         setError("Wallet not connected or WASM not loaded");
         return;
       }
@@ -69,7 +60,7 @@ export function useMerge(): MergeState {
         if (storedA.spent || storedB.spent)
           throw new Error("Cannot merge spent UTXOs");
 
-        const mintAddress = USDC_MINT.toBase58();
+        const tokenAddress = USDC_ADDRESS;
         const amountA = parseInt(storedA.amount);
         const amountB = parseInt(storedB.amount);
         const mergedAmount = amountA + amountB;
@@ -90,7 +81,7 @@ export function useMerge(): MergeState {
           keypair: keypairA,
           blinding: storedA.blinding,
           index: storedA.index,
-          mintAddress,
+          tokenAddress,
         });
         const inputB = new Utxo({
           lightWasm,
@@ -98,7 +89,7 @@ export function useMerge(): MergeState {
           keypair: keypairB,
           blinding: storedB.blinding,
           index: storedB.index,
-          mintAddress,
+          tokenAddress,
         });
 
         // Create merged output
@@ -109,17 +100,12 @@ export function useMerge(): MergeState {
             amount: mergedAmount,
             keypair: mergedKeypair,
             index: tree.nextIndex,
-            mintAddress,
+            tokenAddress,
           }),
-          new Utxo({ lightWasm, amount: 0, mintAddress }),
+          new Utxo({ lightWasm, amount: 0, tokenAddress }),
         ];
 
-        // For merge: extAmount = 0, recipient = signer (placeholder)
-        const signerTokenAccount = await getAssociatedTokenAddress(
-          USDC_MINT,
-          publicKey
-        );
-
+        // For merge: extAmount = 0
         setStep("proving");
         const proofResult = await buildProofInput({
           inputs: [inputA, inputB],
@@ -127,50 +113,21 @@ export function useMerge(): MergeState {
           tree,
           extAmount: new BN(0),
           fee: new BN(0),
-          recipient: signerTokenAccount,
-          feeRecipient: publicKey,
+          recipient: address,
+          feeRecipient: address,
+          tokenAddress,
         });
 
         setStep("signing");
-        const signAndSend = async (tx: Transaction) => {
-          const sig = await sendTransaction(tx, connection);
-          await connection.confirmTransaction(sig, "confirmed");
-          return sig;
-        };
-        const altAddress = await getOrCreateALT(
-          connection,
-          publicKey,
-          signAndSend
-        );
-
-        const provider = new AnchorProvider(connection, wallet, {
-          commitment: "confirmed",
-        });
-        const program = getProgram(provider);
-
-        const versionedTx = await buildTransactVersionedTx(
-          connection,
-          program,
+        const hash = await callTransact(
+          publicClient,
+          walletClient,
           proofResult,
-          publicKey,
-          signerTokenAccount,
-          publicKey,
-          signerTokenAccount,
-          altAddress
+          address
         );
 
-        const signature = await sendTransaction(versionedTx, connection);
         setStep("confirming");
-
-        const latestBlockhash = await connection.getLatestBlockhash();
-        await connection.confirmTransaction(
-          {
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            signature,
-          },
-          "confirmed"
-        );
+        await publicClient.waitForTransactionReceipt({ hash });
 
         // Update local state
         insertCommitments(proofResult.outputCommitments);
@@ -185,22 +142,22 @@ export function useMerge(): MergeState {
           blinding: outputs[0].blinding.toString(),
           keypairPrivkey: mergedKeypair.toHex(),
           index: tree.nextIndex - 2,
-          mintAddress,
+          tokenAddress,
           spent: false,
           createdAt: Date.now(),
-          txSignature: signature,
+          txHash: hash,
         };
         await addUTXO(mergedStoredUtxo);
 
         await addTransaction({
-          signature,
+          signature: hash,
           type: "merge",
           amount: mergedAmount,
           timestamp: Date.now(),
           utxoIds: [utxoIdA, utxoIdB],
         });
 
-        setTxSignature(signature);
+        setTxSignature(hash);
         setStep("done");
       } catch (err: any) {
         setError(err.message || "Merge failed");
@@ -208,12 +165,11 @@ export function useMerge(): MergeState {
       }
     },
     [
-      wallet,
-      publicKey,
+      address,
+      publicClient,
+      walletClient,
       lightWasm,
       tree,
-      connection,
-      sendTransaction,
       utxos,
       insertCommitments,
       markSpent,

@@ -1,16 +1,31 @@
 # Privacy Yield Protocol — Project Status
 
-Last updated: 2026-02-07 (Phase 4 frontend MVP complete)
+Last updated: 2026-02-08 (EVM frontend ported to MegaETH — Phase 5 frontend complete)
 
 ---
 
 ## What This Is
 
-A privacy protocol on Solana that breaks the link between deposits and withdrawals while earning yield on idle funds via Kamino. Uses ZK proofs (Groth16) for privacy and Arcium MPC for metadata protection. Full architecture is in `PLAN.md`.
+A privacy protocol that breaks the link between deposits and withdrawals while earning yield on idle funds. Uses ZK proofs (Groth16) for privacy and Arcium MPC for metadata protection. Full architecture is in `PLAN.md`.
+
+**Primary target chain: MegaETH** (EVM-based). The Solana implementation serves as the reference/prototype. The EVM port is the production deployment target.
 
 ---
 
-## Program IDs
+## Deployments
+
+### EVM (MegaETH) — Primary
+
+Contracts deployed to MegaETH testnet (chain ID 6343).
+
+| Contract | Address | Description |
+|----------|---------|-------------|
+| `PrivacyPool.sol` | `0xD1065321bB703203F1EE29Acc073C6d1eA1A28E2` | Core pool: Merkle tree, transact, batch transact, auto-yield |
+| `Verifier.sol` | `0x567B24545cF1739A300cCDbA0E72ec07Ad6971F4` | Groth16 proof verifier (snarkjs-generated) |
+| `MockUSDC.sol` | `0x7b70eD83f826cE59e65BF1711D60C6F27a0B2eB1` | Test ERC-20 token (permissionless mint) |
+| `PoseidonT3` | `0x4668c470b212fB833d80b85176a52F0fe6684e6D` | External library for Merkle tree hashing |
+
+### Solana (Reference Implementation)
 
 | Program | Address |
 |---------|---------|
@@ -21,7 +36,7 @@ Both deployed to devnet and localnet with matching keypairs at `anchor/target/de
 
 ---
 
-## Phase 1 — ZK Core: COMPLETE
+## Phase 1 — ZK Core (Solana): COMPLETE
 
 All 17 integration tests passing. The USDC privacy pool is fully functional on localnet with deposit, full/partial withdrawal, merge, and consolidation.
 
@@ -117,7 +132,7 @@ All 17 integration tests passing. The USDC privacy pool is fully functional on l
 
 ---
 
-## Phase 2 — Kamino Integration: COMPLETE
+## Phase 2 — Kamino Integration (Solana): COMPLETE
 
 All 10 localnet tests passing against mock-klend.
 
@@ -183,7 +198,7 @@ Mock instructions:
 
 ---
 
-## Phase 2.5 — Devnet Deployment: COMPLETE
+## Phase 2.5 — Devnet Deployment (Solana): COMPLETE
 
 Both programs deployed to devnet with mock-klend. All 8 E2E tests passing with real ZK proofs on devnet.
 
@@ -262,113 +277,228 @@ A real klend instance was previously deployed at `Bq2BdZMBvMuaYQb3oPWJAN9mQTR383
 
 ---
 
-## Phase 4 — Frontend MVP: COMPLETE
+## Phase 3 — EVM Port (MegaETH): COMPLETE
 
-Next.js 14 frontend with client-side ZK proving, wallet adapter, and IndexedDB UTXO persistence. Connects to devnet programs.
+All 35 tests passing. The full protocol has been ported to EVM (Solidity) with batch transact and auto-yield. MegaETH is the primary deployment target.
+
+### What's Built
+
+**Smart Contracts** (`evm/contracts/`):
+| Contract | What it does |
+|----------|-------------|
+| `PrivacyPool.sol` | Core pool: MerkleTree base, `transact()` with auto-yield, `batchTransact()` (max 50), `_transactCore()` internal, yield vault helpers |
+| `Verifier.sol` | Groth16 verifier (snarkjs export, BN254 pairing) |
+| `MockUSDC.sol` | Standard ERC-20 for testing |
+| `MockYieldVault.sol` | 1:1 yToken exchange vault implementing `IYieldVault` interface |
+
+**Key Architecture (EVM vs Solana)**:
+| Aspect | EVM (MegaETH) | Solana |
+|--------|--------------|--------|
+| extDataHash | `keccak256(abi.encodePacked(...)) % FIELD_SIZE` | `Borsh + SHA256` |
+| Nullifiers | `mapping(bytes32 => bool)` | PDA init (fails if exists) |
+| Token transfers | ERC-20 `transferFrom`/`transfer` | SPL CPI with PDA signer |
+| Yield | `IYieldVault.deposit()/redeem()` interface | Kamino klend CPI |
+| Account model | Contract storage (no ALT needed) | PDA accounts + Address Lookup Tables |
+| Initialization | Constructor (one-time) | `initialize` instruction |
+
+**Auto-Yield** (new in Phase 3):
+- `transact()` automatically redeems from vault before withdrawals and sweeps to vault after deposits
+- No manual yield calls needed — the relayer/user just calls `transact()`
+- Merge transactions (extAmount=0) skip yield operations
+
+**Batch Transact** (new in Phase 3):
+- `batchTransact(TransactParams[] calldata paramsList)` — up to 50 transactions in one call
+- Single vault redeem at start, single vault sweep at end (2 vault interactions vs 2N)
+- Sequential execution — later proofs can reference roots created by earlier insertions
+- Entire batch reverts on any failure (atomic)
+
+**Internal Refactor**:
+- `TransactParams` struct encapsulates all proof + extData for a single transaction
+- `_transactCore()` extracted from `transact()` — pure verification + transfer + tree insert
+- `_redeemAllFromVault()` / `_sweepToVault()` — no-op if zero balance/shares
+- `configureYield()`, `yieldDeposit()`, `yieldRedeem()` kept as manual fallbacks (permissionless)
+
+**Test Suite** (`evm/test/`) — 35 tests:
+
+*Phase 1 — Privacy Pool* (`privacy-pool.test.ts`) — 17 tests:
+1-17. Same coverage as Solana: init, deposit, withdraw, partial, merge, double-spend, invalid proof, wrong root, consolidation, events, tampered extAmount, position-swap, split, re-init, tampered output, root consistency
+
+*Phase 2 — Yield Vault* (`yield-vault.test.ts`) — 10 tests:
+1. configureYield stores vault + approves
+2. configureYield non-owner reverts
+3. yieldDeposit manual sweep
+4. yieldRedeem manual withdrawal
+5. yieldDeposit no-op (zero balance)
+6. yieldRedeem no-op (zero shares)
+7. Permissionless (any account)
+8. Auto-yield deposit — `transact()` auto-sweeps to vault
+9. Auto-yield withdrawal — `transact()` auto-redeems then sweeps remainder
+10. Round-trip — deposit + withdraw with auto-yield consistency
+
+*Phase 3 — Batch Transact* (`batch-transact.test.ts`) — 8 tests:
+1. Single-item batch (equivalent to `transact()`)
+2. Multi-deposit batch (two deposits, tree updates)
+3. Mixed batch (deposit then withdrawal with root dependency)
+4. Batch with auto-yield (USDC ends up in vault)
+5. Invalid proof reverts entire batch
+6. Empty batch reverts
+7. Oversized batch (>50) reverts
+8. Sequential root dependency (second proof uses root from first)
+
+### Build & Test Commands
+
+```bash
+# Install dependencies
+cd evm && npm install
+
+# Run all 35 tests
+npx hardhat test
+
+# Run specific test file
+npx hardhat test test/privacy-pool.test.ts
+npx hardhat test test/yield-vault.test.ts
+npx hardhat test test/batch-transact.test.ts
+```
+
+### Key Implementation Notes
+
+- **Library linking**: PoseidonT3 from `poseidon-solidity` is an external library — must deploy + link before PrivacyPool deployment
+- **Proof format**: snarkjs B-point coordinates are REVERSED for Solidity verifier (`pi_b[i][1], pi_b[i][0]`)
+- **Mint field**: EVM address (20 bytes/160 bits) fits BN254 directly — no 31-byte truncation needed (unlike Solana's 32-byte pubkeys)
+- **No position-swap attack**: EVM uses `mapping(bytes32 => bool)` — nullifier position in the pair doesn't matter (unlike Solana PDAs with "nullifier0"/"nullifier1" seeds)
+- **Circuit files**: Shared `artifacts/transaction2.wasm/.zkey` — unchanged from Solana version
+
+---
+
+## Phase 4 — Frontend MVP (Solana): COMPLETE (legacy)
+
+> Original Solana frontend — superseded by Phase 5 EVM frontend. Code still exists for reference but is no longer the active frontend.
+
+Next.js 14 frontend with Phantom wallet adapter, Anchor program interaction, ALTs, and SPL token CPI. Connected to Solana devnet programs.
+
+---
+
+## Phase 5 — EVM Frontend (MegaETH): COMPLETE
+
+Next.js 14 frontend ported from Solana to MegaETH. Uses wagmi + viem + RainbowKit for EVM wallet interaction. Same ZK proving (snarkjs Groth16 in browser), same UTXO model, same IndexedDB persistence.
 
 ### Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Framework | Next.js 14 (App Router) |
-| Styling | Tailwind CSS (custom dark theme, Alliance No.2 font) |
-| Wallet | `@solana/wallet-adapter-react` (Phantom) |
+| Styling | Tailwind CSS (custom dark theme, JetBrains Mono font) |
+| Wallet | wagmi v2 + RainbowKit v2 (MetaMask, WalletConnect, etc.) |
+| Chain | viem (MegaETH testnet, chain ID 6343) |
 | ZK Proving | snarkjs WASM (Groth16, browser-side, ~5-15s per proof) |
 | Hashing | `@lightprotocol/hasher.rs` (Poseidon via WASM) |
 | State | Zustand (UTXO store + tree store) |
 | Persistence | IndexedDB via `idb` (per-wallet UTXO + transaction history) |
-| Program | `@coral-xyz/anchor` 0.31 (IDL-based program interaction) |
+
+### What Changed from Solana Frontend
+
+| Aspect | Solana (Phase 4) | EVM (Phase 5) |
+|--------|------------------|---------------|
+| Wallet | `@solana/wallet-adapter-react` (Phantom) | wagmi + RainbowKit (MetaMask, WalletConnect) |
+| Chain interaction | `@coral-xyz/anchor` + versioned tx + ALTs | viem `writeContract` / `readContract` |
+| extDataHash | Borsh + SHA256 | `keccak256(abi.encodePacked(...)) % FIELD_SIZE` |
+| Nullifiers | PDA derivation (`findNullifierPDAs`) | `bytes32` padding (`padHex/numberToHex`) |
+| Token | SPL CPI | ERC-20 approve + transferFrom |
+| Tree sync | Parse Solana tx logs for Anchor events | `publicClient.getLogs()` for `NewCommitment` events |
+| Mint field | 31-byte truncation of Solana PublicKey | Direct hex address (20 bytes fits BN254) |
+| Proof format | Byte array for Solana program | BigInt with B-point reversal for Solidity |
+| Withdrawal | Relayer polling | Direct (user pays gas) |
 
 ### What's Built
 
-**Core Library** (`fe/src/lib/`) — Browser-adapted ports of the test library:
-| File | What it does | Adaptation from test lib |
-|------|-------------|------------------------|
-| `constants.ts` | Zero values, field prime, tree height | Direct port |
-| `config.ts` | All devnet addresses as `PublicKey` constants | New — reads from hardcoded devnet addresses |
-| `keypair.ts` | Poseidon-based ZK keypair | `crypto.getRandomValues` replaces `ethers.Wallet.createRandom()` |
-| `utxo.ts` | UTXO creation, commitment hashing | `crypto.getRandomValues(Uint8Array(31))` replaces `crypto.randomBytes(31)` |
-| `merkle-tree.ts` | Client-side Merkle tree (height 26) | Direct port with added `nextIndex` getter |
-| `prover.ts` | snarkjs Groth16 proof generation | `fetch('/artifacts/...')` replaces file paths, ArrayBuffer caching, `preloadArtifacts()` |
-| `utils.ts` | extDataHash, nullifier PDAs, formatting | `TextEncoder` replaces `Buffer.from`, added `formatUSDC`/`parseUSDC`/`shortenAddress` |
-| `transaction.ts` | Full transaction builder | New — ALT creation, versioned tx, Anchor program interaction, compute budget (1M CU) |
+**Core Library** (`fe/src/lib/`):
+| File | What it does |
+|------|-------------|
+| `constants.ts` | Zero values (string format), field prime, tree height |
+| `config.ts` | MegaETH chain definition, contract addresses, Pool ABI, ERC20 ABI, wagmi config |
+| `keypair.ts` | Poseidon keypair (string-typed privkey/pubkey, matches EVM test lib) |
+| `utxo.ts` | UTXO with `tokenAddress` (hex), commitment hashing |
+| `merkle-tree.ts` | Client-side Merkle tree (height 26) — unchanged |
+| `prover.ts` | snarkjs Groth16 browser proving + `parseProofForSolidity()` (BigInt, B-point reversal) |
+| `utils.ts` | `getExtDataHash()` (keccak256), `getMintAddressField()` (no truncation), formatting |
+| `transaction.ts` | `buildProofInput()`, `formatCalldata()`, `ensureAllowance()`, `callTransact()` via viem |
 
 **Zustand Stores** (`fe/src/stores/`):
 | File | What it does |
 |------|-------------|
-| `utxo-store.ts` | IndexedDB-backed UTXO + transaction storage, per-wallet isolation, `getUnspent`/`getBalance`/`markSpent` |
-| `tree-store.ts` | Merkle tree sync from on-chain events, reads `next_index` from MerkleTreeAccount at offset 40 |
+| `utxo-store.ts` | IndexedDB `privacy-yield-evm` DB, per-wallet UTXO + tx history, `tokenAddress` field |
+| `tree-store.ts` | Syncs from `NewCommitment` EVM events via `publicClient.getLogs()` |
 
 **React Hooks** (`fe/src/hooks/`):
 | File | What it does |
 |------|-------------|
 | `useWasm.ts` | React context for LightWasm singleton (Poseidon hasher) |
-| `usePoolBalance.ts` | Fetches wallet USDC, pool vault, cToken balances + shielded balance from UTXO store |
-| `useMerkleTree.ts` | Wrapper around tree store, auto-syncs on mount |
-| `useDeposit.ts` | Full deposit flow: create UTXOs → prove → sign → confirm → store |
-| `useWithdraw.ts` | Full/partial withdraw: reconstruct input → prove → sign → confirm → mark spent |
-| `useMerge.ts` | Merge two UTXOs: reconstruct inputs → prove → sign → confirm → update store |
+| `usePoolBalance.ts` | ERC-20 `balanceOf` for wallet + pool vault via `readContract` |
+| `useMerkleTree.ts` | Wrapper around tree store with viem `usePublicClient()` |
+| `useDeposit.ts` | ERC-20 approve → build proof → `callTransact()` → store UTXO |
+| `useWithdraw.ts` | Direct withdrawal (user pays gas, no relayer) |
+| `useMerge.ts` | Merge two UTXOs (extAmount=0, no allowance needed) |
 
 **UI Components** (`fe/src/components/`):
 | File | What it does |
 |------|-------------|
-| `Providers.tsx` | ConnectionProvider (devnet RPC), WalletProvider, WasmProvider |
-| `WalletButton.tsx` | Connect/disconnect with shortened address display |
-| `PoolDashboard.tsx` | Main dashboard: status bar, 4 balance cards, action tabs, notes/history |
-| `DepositForm.tsx` | Amount input, submit, proof status modal |
-| `WithdrawForm.tsx` | Note selector, amount input with max, optional custom recipient |
-| `MergeForm.tsx` | Two note selectors, merged amount preview |
-| `UTXOList.tsx` | List unspent notes with amount, index, commitment hash |
-| `TransactionHistory.tsx` | Past transactions with type labels, amounts, Explorer links |
-| `ProofStatus.tsx` | Modal overlay showing step-by-step proof progress (preparing → proving → signing → confirming) |
+| `Providers.tsx` | WagmiProvider + QueryClientProvider + RainbowKitProvider + WasmProvider |
+| `WalletButton.tsx` | wagmi `useAccount()` + `useDisconnect()` + RainbowKit `useConnectModal()` |
+| `PoolDashboard.tsx` | Dashboard with `[OK] megaeth-testnet` status, balance cards, action tabs |
+| `Select.tsx` | Custom terminal-styled dropdown (replaces native `<select>`) |
+| `DepositForm.tsx` | Amount input + submit |
+| `WithdrawForm.tsx` | Custom note selector + amount + optional EVM recipient |
+| `MergeForm.tsx` | Two custom note selectors + merged amount preview |
+| `UTXOList.tsx` | Unspent notes list |
+| `TransactionHistory.tsx` | Past transactions with MegaETH explorer links |
+| `ProofStatus.tsx` | Step-by-step proof progress modal |
 
 **Pages** (`fe/src/app/`):
 | File | What it does |
 |------|-------------|
-| `layout.tsx` | Root layout with Providers wrapper |
-| `page.tsx` | Landing page with hero, 3-step explainer, auto-redirect on wallet connect |
-| `pool/page.tsx` | Pool dashboard, redirects to landing if wallet disconnected |
+| `layout.tsx` | Root layout with Providers, JetBrains Mono font |
+| `page.tsx` | Cypherpunk terminal landing — ASCII NEBULA logo, boot sequence animation, decipher text ("encrypt your money"), press [ENTER] / tap to enter |
+| `pool/page.tsx` | Pool dashboard (no wallet gate — WalletButton in nav) |
 
-**Design**: Clean minimal dark theme — `#0a0a0a` background, `#71717a` muted text, `#10b981` emerald accent, sharp edges (no border-radius), no gradients. Alliance No.2 font with system-ui fallback.
+**Landing Page UX**:
+- Terminal window with macOS chrome (`nebula@megaeth-testnet ~ /vault`)
+- Sequential boot lines with [OK] indicators (poseidon, groth16, merkle tree)
+- Decipher text animation: `"> encrypt your money."`
+- Desktop: `press [ENTER]` → plays exit sequence → navigates to `/pool`
+- Mobile: auto-detected via `matchMedia("(pointer: coarse)")` → shows `tap to enter`
+- Exit sequence: `loading vault interface...`, `[OK] pool contract linked`, `[OK] merkle state synced`, `ready.`
+
+**Design**: Dark terminal aesthetic — `#0a0a0a` background, `#d65d0e` amber accent, `#71717a` muted text, sharp edges (no border-radius), JetBrains Mono font. Custom styled dropdowns matching terminal theme.
 
 ### Build Notes
 
-- **WASM fix**: `@lightprotocol/hasher.rs` JS entry at `dist/browser-fat/es/` references WASM files relative to itself, but they live at `dist/`. Fixed with `postinstall` script that copies WASM files to the expected location.
-- **Artifact symlinks**: `public/artifacts/transaction2.{wasm,zkey}` are symlinked to `../../../artifacts/` (3 levels up from `public/artifacts/` to `privacy-yield-protocol/`). Run `yarn setup:artifacts` to copy instead if symlinks cause issues.
-- **Webpack config**: Node polyfill fallbacks (fs, path, crypto, stream, etc. all `false`), `asyncWebAssembly` + `layers` experiments enabled.
-- **Bundle size**: Landing page ~230 kB, pool page ~1.45 MB first load (snarkjs + wallet adapter + Anchor).
-- **ZK artifacts**: ~3 MB WASM + ~16.5 MB zkey served from `/public/artifacts/`, preloaded on dashboard mount.
+- **Webpack**: `IgnorePlugin` suppresses `pino-pretty` and `@react-native-async-storage` warnings from WalletConnect/MetaMask SDK. Node polyfill fallbacks (fs, path, crypto, stream all `false`). `asyncWebAssembly` + `layers` experiments.
+- **tsconfig**: `target: "ES2020"` required for BigInt literal support (`0n`).
+- **Bundle size**: Landing page ~91 kB (no wallet code), pool page ~1.51 MB (wagmi + snarkjs).
+- **Remaining `web-worker` warning**: Cosmetic, from ffjavascript's dynamic require for Node.js workers. Harmless in browser.
 
 ### Commands
 
 ```bash
-# Install dependencies
 cd fe && yarn install
-
-# Copy ZK artifacts (if symlinks don't work)
-yarn setup:artifacts
-
-# Development server
-yarn dev
-
-# Production build
-yarn build && yarn start
+yarn dev          # Development server (localhost:3000)
+yarn build        # Production build
 ```
 
 ---
 
 ## Remaining Phases
 
-### Phase 3 — Arcium Private Relayer (next)
+### Phase 6 — Arcium Private Relayer (next)
 - Two MPC circuits: queue withdrawal request + batch submit
 - Users encrypt withdrawal requests to MPC cluster (IP privacy)
-- Batch submission masks individual withdrawal timing
+- Batch submission masks individual withdrawal timing (leverages `batchTransact()` on EVM)
 - Relayer fee model (fee recipient becomes MPC cluster, not signer)
 
 ### Production Hardening
 - Event indexer for fast Merkle tree reconstruction
 - Mainnet trusted setup ceremony (multi-party, 10+ participants)
-- Production deployment (Solana mainnet + Arcium mainnet)
+- Production deployment (MegaETH mainnet + Arcium mainnet)
 
 ---
 
@@ -379,90 +509,82 @@ privacy-yield-protocol/
   PLAN.md                              — Full architecture document
   BUG_REPORT.md                        — Code audit (12 bugs, 3 test issues)
   PROJECT_STATUS.md                    — This file
-  fe_plan.md                           — Frontend implementation plan
   artifacts/
-    transaction2.wasm                  — Circom WASM circuit
+    transaction2.wasm                  — Circom WASM circuit (shared by Solana + EVM)
     transaction2.zkey                  — Groth16 proving key
     verifyingkey2.json                 — Groth16 verification key
-  anchor/
-    Anchor.toml                        — Workspace: privacy-yield + mock-klend
-    Cargo.toml / Cargo.lock
-    package.json                       — test, test:phase2, devnet:setup, test:devnet scripts
-    devnet_config.json                 — All devnet addresses + keypairs (generated by devnet:setup)
-    programs/privacy-yield/src/
-      lib.rs                           — Main program (initialize + transact + klend CPI)
-      klend_cpi.rs                     — Raw CPI to klend (deposit + redeem)
-      merkle_tree.rs                   — On-chain Merkle tree
-      groth16.rs                       — On-chain Groth16 verifier
-      utils.rs                         — Field math, extDataHash, checks
-      errors.rs                        — Error codes
-    programs/mock-klend/src/
-      lib.rs                           — Mock klend (1:1 cToken exchange, 4 instructions)
-    scripts/
-      devnet-setup.ts                  — Idempotent devnet account setup
-      test-phase2.sh                   — Builds + starts validator + runs phase2 tests
-    tests/
-      privacy_yield.ts                 — 17 Phase 1 integration tests
-      phase2_klend.ts                  — 10 Phase 2 localnet tests (mock-klend)
-      phase2_devnet.ts                 — 8 Phase 2.5 devnet E2E tests (ZK proofs + mock-klend)
-      lib/
-        constants.ts                   — Config and zero values
-        keypair.ts                     — Poseidon keypairs
-        utxo.ts                        — UTXO creation and encryption
-        merkle_tree.ts                 — Client Merkle tree
-        prover.ts                      — snarkjs proof generation
-        utils.ts                       — extDataHash, mint fields, tx helpers
 
-fe/                                        — Frontend (Next.js 14)
-    package.json                           — Dependencies + postinstall WASM fix
-    next.config.mjs                        — Webpack Node polyfill fallbacks, WASM experiments
-    tailwind.config.ts                     — Custom dark theme (surfaces, accent, muted)
+  evm/                                     — EVM Contracts (MegaETH) — PRIMARY TARGET
+    hardhat.config.ts                      — Hardhat config (MegaETH testnet network)
+    .env                                   — Deployer key + RPC URL
+    package.json                           — Dependencies (hardhat, ethers, snarkjs, poseidon-solidity)
+    deployments/megaeth-testnet.json       — Deployed contract addresses
+    contracts/
+      PrivacyPool.sol                      — Core pool (MerkleTree + transact + batch + yield)
+      Verifier.sol                         — Groth16 verifier (snarkjs-generated)
+      mocks/MockUSDC.sol                   — Test ERC-20 (permissionless mint)
+      mocks/MockYieldVault.sol             — Test yield vault (1:1 rate)
+    scripts/
+      deploy-megaeth.ts                    — Deploy all contracts to MegaETH testnet
+      stress-test.ts                       — 200 sequential deposits for gas profiling
+    test/
+      privacy-pool.test.ts                 — 17 Phase 1 tests (ZK core)
+      yield-vault.test.ts                  — 10 Phase 2 tests (yield integration)
+      batch-transact.test.ts               — 8 Phase 3 tests (batch + auto-yield)
+      lib/                                 — Test library (constants, keypair, utxo, merkle_tree, prover, utils)
+
+  fe/                                        — Frontend (Next.js 14, MegaETH)
+    package.json                             — wagmi, viem, RainbowKit, snarkjs, zustand
+    next.config.mjs                          — Webpack IgnorePlugin + fallbacks + WASM
+    tailwind.config.ts                       — Custom dark terminal theme
+    tsconfig.json                            — ES2020 target for BigInt
     src/
       app/
-        layout.tsx                         — Root layout with Providers
-        page.tsx                           — Landing page (hero + explainer)
-        pool/page.tsx                      — Pool dashboard (wallet-gated)
-        globals.css                        — Font-face, wallet adapter overrides
+        layout.tsx                           — Root layout (JetBrains Mono, Providers)
+        page.tsx                             — Cypherpunk terminal landing page
+        pool/page.tsx                        — Pool dashboard (WalletButton in nav)
+        globals.css                          — Theme variables, RainbowKit overrides
       lib/
-        constants.ts                       — Zero values, field prime
-        config.ts                          — All devnet addresses
-        keypair.ts                         — Browser Poseidon keypairs
-        utxo.ts                            — UTXO creation
-        merkle-tree.ts                     — Client Merkle tree
-        prover.ts                          — snarkjs browser proving
-        utils.ts                           — extDataHash, formatting
-        transaction.ts                     — ALT, versioned tx, Anchor program
-        idl/privacy_yield.json             — Program IDL
+        config.ts                            — MegaETH chain, contract addresses, ABIs, wagmi config
+        constants.ts                         — Zero values (string format), field prime
+        keypair.ts                           — Poseidon keypair (string-typed)
+        utxo.ts                              — UTXO with tokenAddress (hex)
+        merkle-tree.ts                       — Client Merkle tree (height 26)
+        prover.ts                            — snarkjs browser proving + Solidity proof format
+        utils.ts                             — extDataHash (keccak256), formatting
+        transaction.ts                       — buildProofInput, formatCalldata, ensureAllowance, callTransact
       stores/
-        utxo-store.ts                      — IndexedDB UTXO persistence
-        tree-store.ts                      — Merkle tree sync from chain
+        utxo-store.ts                        — IndexedDB UTXO persistence (EVM)
+        tree-store.ts                        — NewCommitment event log sync
       hooks/
-        useWasm.ts                         — LightWasm context provider
-        usePoolBalance.ts                  — Wallet + pool + cToken balances
-        useMerkleTree.ts                   — Tree sync hook
-        useDeposit.ts                      — Deposit flow (prove → sign → confirm)
-        useWithdraw.ts                     — Withdraw flow
-        useMerge.ts                        — Merge flow
+        useWasm.ts                           — LightWasm context provider
+        usePoolBalance.ts                    — ERC-20 balanceOf reads
+        useMerkleTree.ts                     — Tree sync with viem PublicClient
+        useDeposit.ts                        — Approve + prove + transact
+        useWithdraw.ts                       — Direct withdrawal (no relayer)
+        useMerge.ts                          — Merge two UTXOs
       components/
-        Providers.tsx                      — Connection + wallet + WASM providers
-        PoolDashboard.tsx                  — Main dashboard UI
-        DepositForm.tsx                    — Deposit amount input + submit
-        WithdrawForm.tsx                   — Note selector + amount + recipient
-        MergeForm.tsx                      — Two-note merge
-        UTXOList.tsx                       — Unspent notes list
-        TransactionHistory.tsx             — Past transactions with Explorer links
-        ProofStatus.tsx                    — Step-by-step proof progress modal
-        WalletButton.tsx                   — Connect/disconnect button
+        Providers.tsx                        — Wagmi + RainbowKit + Query + WASM
+        WalletButton.tsx                     — Connect/disconnect (RainbowKit modal)
+        PoolDashboard.tsx                    — Dashboard UI
+        Select.tsx                           — Custom terminal-styled dropdown
+        DepositForm.tsx                      — Deposit form
+        WithdrawForm.tsx                     — Withdraw with custom note selector
+        MergeForm.tsx                        — Merge with custom note selectors
+        UTXOList.tsx                         — Unspent notes
+        TransactionHistory.tsx               — Tx history with MegaETH explorer
+        ProofStatus.tsx                      — Proof progress modal
     public/
-      fonts/AllianceNo2-Regular.otf        — Custom font
       artifacts/
-        transaction2.wasm                  — Symlink → ../../../artifacts/
-        transaction2.zkey                  — Symlink → ../../../artifacts/
+        transaction2.wasm                    — Symlink → ../../../artifacts/
+        transaction2.zkey                    — Symlink → ../../../artifacts/
 
-klend/                                   — Kamino Lending (legacy real klend devnet deployment)
-  devnet_config.json                     — Addresses for real klend at Bq2BdZ...
-  target/
-    idl/klend.json                       — IDL (fetched from mainnet v1.13.0)
-    deploy/klend-keypair.json            — Program keypair
-  tests/devnet_setup.ts                  — Setup script for real klend
+  anchor/                                    — Solana (reference implementation)
+    programs/privacy-yield/src/              — Main program (initialize + transact + klend CPI)
+    programs/mock-klend/src/                 — Mock klend (1:1 cToken exchange)
+    tests/                                   — 17 Phase 1 + 10 Phase 2 + 8 devnet E2E tests
+    scripts/                                 — devnet-setup.ts, test-phase2.sh
+    devnet_config.json                       — All devnet addresses
+
+  klend/                                     — Kamino Lending (legacy real klend devnet deployment)
 ```

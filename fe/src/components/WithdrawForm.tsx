@@ -5,6 +5,7 @@ import { useWithdraw } from "@/hooks/useWithdraw";
 import { useUTXOStore } from "@/stores/utxo-store";
 import { formatUSDC } from "@/lib/utils";
 import { ProofStatus } from "./ProofStatus";
+import { Select } from "./Select";
 
 export function WithdrawForm() {
   const [amount, setAmount] = useState("");
@@ -42,22 +43,19 @@ export function WithdrawForm() {
           <label className="block text-xs text-muted mb-2">
             {">"} select note
           </label>
-          <select
+          <Select
             value={selectedUtxo}
-            onChange={(e) => {
-              setSelectedUtxo(e.target.value);
+            onChange={(v) => {
+              setSelectedUtxo(v);
               setAmount("");
             }}
-            className="w-full bg-surface-0 border border-border px-4 py-3 text-sm text-white focus:outline-none focus:border-accent appearance-none cursor-pointer"
+            options={unspentUtxos.map((u) => ({
+              value: u.id,
+              label: `${formatUSDC(parseInt(u.amount))} USDC`,
+            }))}
+            placeholder="-- select --"
             disabled={step !== "idle"}
-          >
-            <option value="">-- select --</option>
-            {unspentUtxos.map((u) => (
-              <option key={u.id} value={u.id}>
-                {formatUSDC(parseInt(u.amount))} USDC
-              </option>
-            ))}
-          </select>
+          />
         </div>
 
         <div>
@@ -109,7 +107,7 @@ export function WithdrawForm() {
               type="text"
               value={recipientAddress}
               onChange={(e) => setRecipientAddress(e.target.value)}
-              placeholder="solana address (default: your wallet)"
+              placeholder="0x... EVM address (default: your wallet)"
               className="mt-2 w-full bg-surface-0 border border-border px-4 py-2.5 text-xs text-white focus:outline-none focus:border-accent placeholder:text-muted/30"
               disabled={step !== "idle"}
             />

@@ -29,6 +29,18 @@ contract PrivacyPool is MerkleTree {
         address tokenAddress;
     }
 
+    struct TransactParams {
+        uint256[2] proofA;
+        uint256[2][2] proofB;
+        uint256[2] proofC;
+        uint256 root;
+        uint256 publicAmount;
+        uint256 extDataHash;
+        bytes32[2] inputNullifiers;
+        uint256[2] outputCommitments;
+        ExtData extData;
+    }
+
     event NewCommitment(uint256 indexed commitment, uint256 index, bytes encryptedOutput);
     event NewNullifier(bytes32 indexed nullifier);
 
@@ -64,6 +76,85 @@ contract PrivacyPool is MerkleTree {
         uint256[2] calldata outputCommitments,
         ExtData calldata extData
     ) external {
+        // Auto-yield: redeem before withdrawal
+        if (yieldVault != address(0) && extData.extAmount < 0) {
+            _redeemAllFromVault();
+        }
+
+        _transactCore(proofA, proofB, proofC, root, publicAmount, extDataHash,
+                      inputNullifiers, outputCommitments, extData);
+
+        // Auto-yield: sweep after deposit (skip merge — extAmount == 0)
+        if (yieldVault != address(0) && extData.extAmount != 0) {
+            _sweepToVault();
+        }
+    }
+
+    function batchTransact(TransactParams[] calldata paramsList) external {
+        require(paramsList.length > 0, "Empty batch");
+        require(paramsList.length <= 50, "Batch too large");
+
+        // Redeem all from vault once at start
+        if (yieldVault != address(0)) {
+            _redeemAllFromVault();
+        }
+
+        for (uint256 i = 0; i < paramsList.length; i++) {
+            _transactCore(
+                paramsList[i].proofA,
+                paramsList[i].proofB,
+                paramsList[i].proofC,
+                paramsList[i].root,
+                paramsList[i].publicAmount,
+                paramsList[i].extDataHash,
+                paramsList[i].inputNullifiers,
+                paramsList[i].outputCommitments,
+                paramsList[i].extData
+            );
+        }
+
+        // Sweep all remaining USDC to vault at end
+        if (yieldVault != address(0)) {
+            _sweepToVault();
+        }
+    }
+
+    // ==================== Yield Vault Functions ====================
+
+    function configureYield(address _vault) external {
+        require(msg.sender == owner, "Not owner");
+        yieldVault = _vault;
+        // Approve vault to pull tokens
+        token.approve(_vault, type(uint256).max);
+    }
+
+    function yieldDeposit() external {
+        require(yieldVault != address(0), "Vault not configured");
+        uint256 balance = token.balanceOf(address(this));
+        if (balance == 0) return;
+        IYieldVault(yieldVault).deposit(balance);
+    }
+
+    function yieldRedeem() external {
+        require(yieldVault != address(0), "Vault not configured");
+        uint256 shares = IYieldVault(yieldVault).balanceOf(address(this));
+        if (shares == 0) return;
+        IYieldVault(yieldVault).redeem(shares);
+    }
+
+    // ==================== Internal ====================
+
+    function _transactCore(
+        uint256[2] calldata proofA,
+        uint256[2][2] calldata proofB,
+        uint256[2] calldata proofC,
+        uint256 root,
+        uint256 publicAmount,
+        uint256 extDataHash,
+        bytes32[2] calldata inputNullifiers,
+        uint256[2] calldata outputCommitments,
+        ExtData calldata extData
+    ) internal {
         // 1. Check root is known
         if (!isKnownRoot(root)) revert UnknownRoot();
 
@@ -136,30 +227,15 @@ contract PrivacyPool is MerkleTree {
         emit NewCommitment(outputCommitments[1], index1, extData.encryptedOutput2);
     }
 
-    // ==================== Yield Vault Functions ====================
-
-    function configureYield(address _vault) external {
-        require(msg.sender == owner, "Not owner");
-        yieldVault = _vault;
-        // Approve vault to pull tokens
-        token.approve(_vault, type(uint256).max);
-    }
-
-    function yieldDeposit() external {
-        require(yieldVault != address(0), "Vault not configured");
-        uint256 balance = token.balanceOf(address(this));
-        if (balance == 0) return;
-        IYieldVault(yieldVault).deposit(balance);
-    }
-
-    function yieldRedeem() external {
-        require(yieldVault != address(0), "Vault not configured");
+    function _redeemAllFromVault() internal {
         uint256 shares = IYieldVault(yieldVault).balanceOf(address(this));
-        if (shares == 0) return;
-        IYieldVault(yieldVault).redeem(shares);
+        if (shares > 0) IYieldVault(yieldVault).redeem(shares);
     }
 
-    // ==================== Internal ====================
+    function _sweepToVault() internal {
+        uint256 balance = token.balanceOf(address(this));
+        if (balance > 0) IYieldVault(yieldVault).deposit(balance);
+    }
 
     function _checkPublicAmount(
         int256 extAmount,

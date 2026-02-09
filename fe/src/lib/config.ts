@@ -1,55 +1,139 @@
-import { PublicKey } from "@solana/web3.js";
+import { defineChain } from "viem";
+import { http, createConfig } from "wagmi";
 
-export const DEVNET_RPC = "https://api.devnet.solana.com";
+// MegaETH testnet chain definition
+export const megaethTestnet = defineChain({
+  id: 6343,
+  name: "MegaETH Testnet",
+  nativeCurrency: {
+    name: "Ether",
+    symbol: "ETH",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://carrot.megaeth.com/rpc"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "MegaETH Explorer",
+      url: "https://megaexplorer.xyz",
+    },
+  },
+  testnet: true,
+});
 
-export const PRIVACY_YIELD_PROGRAM_ID = new PublicKey(
-  "5S7PQfffWm4uYMg62Zsjzp2BZgTQSVFj8cmoNBRggwWw"
-);
-export const MOCK_KLEND_PROGRAM_ID = new PublicKey(
-  "CcubA6KJKRuBV1GBbXxeu9rNwv6UeVLZfCvfs6LqBZfk"
-);
+// Contract addresses (MegaETH testnet)
+export const POOL_ADDRESS = "0xD1065321bB703203F1EE29Acc073C6d1eA1A28E2" as const;
+export const USDC_ADDRESS = "0x7b70eD83f826cE59e65BF1711D60C6F27a0B2eB1" as const;
+export const VERIFIER_ADDRESS = "0x567B24545cF1739A300cCDbA0E72ec07Ad6971F4" as const;
 
-export const USDC_MINT = new PublicKey(
-  "fAdUukCWZcNkuxs1ZgJ44tCBdHFFdsy8q31jsKvzLFx"
-);
+// Minimal ERC-20 ABI
+export const ERC20_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "mint",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
 
-export const POOL_CONFIG_PDA = new PublicKey(
-  "DWq7V5PDuoow7frxVDt8mFYu5uTLGvy1uguXrMxTNAt4"
-);
-export const TREE_ACCOUNT_PDA = new PublicKey(
-  "3rUxvp1QDCWhxCEf2j1KenusPKdSEbuTMjqpfDKUR7YN"
-);
-export const KLEND_CONFIG_PDA = new PublicKey(
-  "ENto1q6tDXDuuCMkpb4stANASXHtRHTiRKYBGVnFb7C1"
-);
-export const POOL_VAULT = new PublicKey(
-  "6PZW2bE4oWqR5Cr54rZmJPBEkf5ApUftNshsf9j1hAoH"
-);
-export const POOL_CTOKEN_ACCOUNT = new PublicKey(
-  "GeBVUQoajGmnvzVZpggV8JydbXveEpyVPBPuGwWm9WpX"
-);
+// PrivacyPool ABI (relevant functions + events)
+export const POOL_ABI = [
+  {
+    name: "transact",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proofA", type: "uint256[2]" },
+      { name: "proofB", type: "uint256[2][2]" },
+      { name: "proofC", type: "uint256[2]" },
+      { name: "root", type: "uint256" },
+      { name: "publicAmount", type: "uint256" },
+      { name: "extDataHash", type: "uint256" },
+      { name: "inputNullifiers", type: "bytes32[2]" },
+      { name: "outputCommitments", type: "uint256[2]" },
+      {
+        name: "extData",
+        type: "tuple",
+        components: [
+          { name: "recipient", type: "address" },
+          { name: "extAmount", type: "int256" },
+          { name: "encryptedOutput1", type: "bytes" },
+          { name: "encryptedOutput2", type: "bytes" },
+          { name: "fee", type: "uint256" },
+          { name: "feeRecipient", type: "address" },
+          { name: "tokenAddress", type: "address" },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+  {
+    name: "NewCommitment",
+    type: "event",
+    inputs: [
+      { name: "commitment", type: "uint256", indexed: true },
+      { name: "index", type: "uint256", indexed: false },
+      { name: "encryptedOutput", type: "bytes", indexed: false },
+    ],
+  },
+  {
+    name: "NewNullifier",
+    type: "event",
+    inputs: [
+      { name: "nullifier", type: "bytes32", indexed: true },
+    ],
+  },
+] as const;
 
-// Klend addresses
-export const LENDING_MARKET = new PublicKey(
-  "H2YdcUtXJk4aqd4NGkLQiTGbdBEmU1fR5TAbCvmsLc3t"
-);
-export const LENDING_MARKET_AUTHORITY = new PublicKey(
-  "J2sxBRiVPGc2AbEYXyiqqKStUWHHFaG41uzg9ytjZBbR"
-);
-export const RESERVE = new PublicKey(
-  "AUWXJLxT54PycdYXtvKSpREGy1NRzshrWqKhtfYQp8bz"
-);
-export const RESERVE_LIQUIDITY_SUPPLY = new PublicKey(
-  "CbZwfur2u54Zozs4PWoxtJRja552BBhmTciUuVdnSCc9"
-);
-export const RESERVE_COLLATERAL_MINT = new PublicKey(
-  "8VMn3ACdnrdxnBmVoRTJMzs9s4gsFLWQsb9DeuN7Jygo"
-);
-
-// Relayer config
-export const RELAYER_URL =
-  process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3001";
-export const RELAYER_PUBKEY = new PublicKey(
-  process.env.NEXT_PUBLIC_RELAYER_PUBKEY ||
-    "11111111111111111111111111111111" // placeholder — set in .env.local
-);
+// wagmi config
+export const wagmiConfig = createConfig({
+  chains: [megaethTestnet],
+  transports: {
+    [megaethTestnet.id]: http(),
+  },
+  ssr: true,
+});

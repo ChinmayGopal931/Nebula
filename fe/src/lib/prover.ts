@@ -59,56 +59,25 @@ export async function prove(input: any): Promise<{
   return { proof, publicSignals };
 }
 
-export function parseProofToBytesArray(proof: Proof): {
-  proofA: number[];
-  proofB: number[];
-  proofC: number[];
+/**
+ * Parse snarkjs proof into Solidity-compatible format.
+ * IMPORTANT: snarkjs Solidity verifier expects G2 point (B) coordinates
+ * in REVERSED order compared to the JSON output.
+ */
+export function parseProofForSolidity(proof: Proof): {
+  a: [bigint, bigint];
+  b: [[bigint, bigint], [bigint, bigint]];
+  c: [bigint, bigint];
 } {
-  const data = JSON.parse(JSON.stringify(proof));
-
-  for (const key in data) {
-    if (key === "pi_a" || key === "pi_c") {
-      for (const j in data[key]) {
-        data[key][j] = Array.from(
-          (utils as any).leInt2Buff(
-            (utils as any).unstringifyBigInts(data[key][j]),
-            32
-          )
-        ).reverse();
-      }
-    } else if (key === "pi_b") {
-      for (const j in data[key]) {
-        for (const z in data[key][j]) {
-          data[key][j][z] = Array.from(
-            (utils as any).leInt2Buff(
-              (utils as any).unstringifyBigInts(data[key][j][z]),
-              32
-            )
-          );
-        }
-      }
-    }
-  }
-
   return {
-    proofA: [data.pi_a[0], data.pi_a[1]].flat(),
-    proofB: [
-      data.pi_b[0].flat().reverse(),
-      data.pi_b[1].flat().reverse(),
-    ].flat(),
-    proofC: [data.pi_c[0], data.pi_c[1]].flat(),
+    a: [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])],
+    // B point: coordinates are REVERSED for Solidity verifier
+    b: [
+      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
+      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
+    ],
+    c: [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])],
   };
-}
-
-export function parseToBytesArray(publicSignals: string[]): number[][] {
-  return publicSignals.map((signal) => {
-    return Array.from(
-      (utils as any).leInt2Buff(
-        (utils as any).unstringifyBigInts(signal),
-        32
-      )
-    ).reverse() as number[];
-  });
 }
 
 export type { Proof };

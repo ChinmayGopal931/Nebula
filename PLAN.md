@@ -1,6 +1,8 @@
 # Privacy Yield Protocol — Architecture Plan
 
-A privacy protocol on Solana that breaks the link between deposits and withdrawals while earning yield on idle funds via Kamino. Uses ZK proofs for privacy and Arcium MPC for metadata protection.
+A privacy protocol that breaks the link between deposits and withdrawals while earning yield on idle funds. Uses ZK proofs (Groth16) for privacy and Arcium MPC for metadata protection.
+
+**Primary target chain: MegaETH** (EVM-based). The Solana implementation is the reference/prototype. The EVM port at `evm/` is the production deployment target with batch transact and auto-yield.
 
 ---
 
@@ -19,12 +21,20 @@ ZK LAYER — Privacy (IMPLEMENTED)
   Merkle tree of commitments (USDC-denominated)
   Nullifiers prevent double-spending
   User generates proofs locally (snarkjs, Groth16)
-  On-chain Groth16 verification via Solana's alt_bn128 precompile
+  Same circuit (transaction2) used on both Solana and EVM
   Scales to millions of deposits with O(1) on-chain storage
 
-SOLANA PROGRAM — Pool Logic + Yield (IMPLEMENTED)
+EVM CONTRACT — Pool Logic + Yield + Batch (IMPLEMENTED — MegaETH, primary target)
+  PrivacyPool.sol: Merkle tree, transact, batchTransact, auto-yield
+  Groth16 verification via BN254 precompile (ecPairing)
+  Nullifiers via mapping(bytes32 => bool)
+  ERC-20 USDC pool with IYieldVault integration
+  Auto-yield: redeems before withdrawals, sweeps after deposits
+  Batch: up to 50 transactions per call, single vault redeem/sweep
+
+SOLANA PROGRAM — Pool Logic + Yield (IMPLEMENTED — reference/prototype)
   Manages the Merkle tree (26 hashes + root + 100-entry history)
-  Verifies ZK proofs
+  Verifies ZK proofs via alt_bn128 precompile
   Manages nullifier PDAs
   Holds USDC in pool vault (ATA owned by pool_config PDA)
   Holds cTokens from Kamino (ATA owned by pool_config PDA)
@@ -633,33 +643,40 @@ All 10 localnet tests + 8 devnet E2E tests passing.
 
 Both programs deployed to devnet with mock-klend. All 8 E2E tests passing with real ZK proofs on devnet. Setup script at `scripts/devnet-setup.ts`, all addresses in `devnet_config.json`.
 
-### Phase 3 — Arcium Private Batch Relayer (planned)
+### Phase 3 — EVM Port (MegaETH): COMPLETE
 
-**Arcium MPC circuits**
-- Queue request circuit: receive encrypted signed transaction (deposit or withdrawal), validate, store in queue
-- Deposit batch circuit: shuffle queued deposits (ArcisRNG), submit to Solana, advance durable nonces
-- Withdrawal batch circuit: shuffle queued withdrawals (ArcisRNG), submit to Solana, advance durable nonces
+All 35 tests passing. Full protocol ported to Solidity with batch transact and auto-yield. MegaETH is the primary deployment target.
 
-**Durable nonce infrastructure**
-- Nonce account creation helper (one per user, reusable)
-- Transaction building with durable nonce instead of recent blockhash
-- Nonce advancement after batch submission
+**Smart Contracts** (`evm/contracts/`):
+- `PrivacyPool.sol` — Core pool: MerkleTree base, `transact()` with auto-yield, `batchTransact()` (max 50), `_transactCore()` internal, yield vault helpers
+- `Verifier.sol` — Groth16 verifier (snarkjs export, BN254 pairing)
+- `MockUSDC.sol` — Standard ERC-20 for testing
+- `MockYieldVault.sol` — 1:1 yToken exchange vault implementing `IYieldVault`
 
-**Arcium MXE setup**
-- Deploy MPC circuits to Arcium devnet
-- Configure cluster (node selection, threshold)
-- Initialize computation definition with LUT
-- Fund MPC cluster wallet for gas sponsorship (withdrawals)
+**Key EVM differences from Solana**:
+- extDataHash: `keccak256(abi.encodePacked(...)) % FIELD_SIZE` (was Borsh+SHA256)
+- Nullifiers: `mapping(bytes32 => bool)` (was PDA init — no position-swap attack vector on EVM)
+- Token: ERC-20 `transferFrom`/`transfer` (was SPL CPI with PDA signer)
+- Yield: `IYieldVault.deposit()/redeem()` interface (was Kamino CPI)
+- No ALT, no account model, constructor-based init
 
-**Client SDK additions**
-- Create/manage durable nonce account per user
-- Build transactions with durable nonce
-- Encrypt signed transaction to MPC cluster's public key
-- Submit encrypted request to Arcium (for both deposits and withdrawals)
-- Listen for batch submission confirmation (via on-chain event or Arcium callback)
-- Fallback: direct submission if MPC is unavailable
+**Auto-Yield** (new in EVM):
+- `transact()` automatically redeems from vault before withdrawals and sweeps to vault after deposits
+- Merge transactions (extAmount=0) skip yield operations
+- Eliminates need for separate kamino_redeem/kamino_deposit calls
 
-### Phase 4 — Frontend MVP: COMPLETE
+**Batch Transact** (new in EVM):
+- `batchTransact(TransactParams[])` — up to 50 transactions atomically
+- Single vault redeem at start, single sweep at end (2 vault interactions vs 2N)
+- Sequential execution — later proofs can reference roots from earlier insertions
+- Entire batch reverts on any failure
+
+**Test Suite** (`evm/test/`) — 35 tests:
+- `privacy-pool.test.ts` (17) — core ZK pool (same coverage as Solana Phase 1)
+- `yield-vault.test.ts` (10) — yield integration with auto-yield
+- `batch-transact.test.ts` (8) — batch transact with auto-yield
+
+### Phase 4 — Frontend MVP (Solana): COMPLETE
 
 Next.js 14 frontend with client-side ZK proving, wallet adapter, and IndexedDB UTXO persistence. See `PROJECT_STATUS.md` for full details.
 
@@ -669,16 +686,41 @@ Next.js 14 frontend with client-side ZK proving, wallet adapter, and IndexedDB U
 - Address Lookup Table for versioned transactions (bundled deposit+yield, bundled redeem+withdraw)
 - Clean dark theme with Alliance No.2 font
 
+### Phase 5 — Arcium Private Batch Relayer (planned)
+
+**Arcium MPC circuits**
+- Queue request circuit: receive encrypted signed transaction, validate, store in queue
+- Batch circuit: shuffle queued transactions (ArcisRNG), call `batchTransact()` on MegaETH
+- On EVM, the MPC cluster can submit an entire batch in one `batchTransact()` call (much simpler than Solana's per-tx submission)
+
+**Arcium MXE setup**
+- Deploy MPC circuits to Arcium devnet
+- Configure cluster (node selection, threshold)
+- Initialize computation definition with LUT
+- Fund MPC cluster wallet for gas sponsorship
+
+**Client SDK additions**
+- Encrypt signed transaction to MPC cluster's public key
+- Submit encrypted request to Arcium
+- Listen for batch submission confirmation (via on-chain event or Arcium callback)
+- Fallback: direct submission if MPC is unavailable
+
+### Phase 6 — EVM Frontend (planned)
+
+- Port Solana frontend to work with MegaETH
+- Replace wallet adapter (MetaMask/WalletConnect instead of Phantom)
+- Replace Anchor program interaction with ethers.js/viem contract calls
+- Same ZK proving (snarkjs), same UTXO model, same IndexedDB persistence
+
 ### Production Hardening (planned)
 
 **Event indexer**
 - Index all deposit events for fast Merkle tree reconstruction
-- Serve tree data via API (or use Helius webhooks)
-- Optional: store encrypted receipts for user (with user's encryption key)
+- Serve tree data via API
 
 **Production deployment**
 - Mainnet trusted setup ceremony (multi-party, 10+ participants)
-- Solana mainnet deployment
+- MegaETH mainnet deployment
 - Arcium mainnet MPC deployment
 - Multiple relayer endpoints (redundancy)
 - Monitoring and alerting
@@ -713,22 +755,22 @@ Next.js 14 frontend with client-side ZK proving, wallet adapter, and IndexedDB U
 ```
 TRUSTLESS (no trust required):
   - ZK proofs: math guarantees correctness
-  - Nullifier uniqueness: Solana enforces (PDA init fails if exists)
+  - Nullifier uniqueness: contract enforces (mapping on EVM, PDA on Solana)
   - Balance conservation: circuit constraint, cannot be violated
   - Merkle tree integrity: hash chain, tamper-evident
   - ExtDataHash: binds all metadata to proof
-  - Kamino position: PDA-owned, no external signer
+  - Yield vault position: contract-owned, no external signer
 
 TRUST ASSUMPTIONS:
   - Trusted setup: at least 1 ceremony participant was honest
   - Arcium MPC: majority of cluster nodes are honest
     (only affects metadata privacy, not funds or ZK privacy)
-  - Kamino: protocol risk (smart contract bug, insolvency)
-  - Solana: chain liveness and finality
+  - Yield vault: protocol risk (smart contract bug, insolvency)
+  - MegaETH: chain liveness and finality
 
 KEY PROPERTY:
   Even if Arcium MPC is fully compromised:
-    - Funds are safe (controlled by ZK proofs + Solana program)
+    - Funds are safe (controlled by ZK proofs + smart contract)
     - Deposit-withdrawal unlinkability is preserved (ZK, not MPC)
     - Only metadata privacy (IP, timing) is degraded
   Arcium is additive privacy, not a dependency.

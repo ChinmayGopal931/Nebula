@@ -1,22 +1,17 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useAnchorWallet } from "@solana/wallet-adapter-react";
-import { AnchorProvider } from "@coral-xyz/anchor";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
-import { Transaction } from "@solana/web3.js";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import BN from "bn.js";
 
-import { USDC_MINT } from "@/lib/config";
+import { USDC_ADDRESS } from "@/lib/config";
 import { Utxo } from "@/lib/utxo";
 import { Keypair } from "@/lib/keypair";
 import { parseUSDC } from "@/lib/utils";
 import {
-  getProgram,
-  getOrCreateALT,
   buildProofInput,
-  buildTransactVersionedTx,
+  ensureAllowance,
+  callTransact,
 } from "@/lib/transaction";
 import { useUTXOStore, StoredUTXO } from "@/stores/utxo-store";
 import { useTreeStore } from "@/stores/tree-store";
@@ -40,9 +35,9 @@ interface DepositState {
 }
 
 export function useDeposit(): DepositState {
-  const { connection } = useConnection();
-  const wallet = useAnchorWallet();
-  const { sendTransaction, publicKey } = useWallet();
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const lightWasm = useWasm();
   const { tree, insertCommitments } = useTreeStore();
   const { addUTXO, addTransaction } = useUTXOStore();
@@ -53,7 +48,7 @@ export function useDeposit(): DepositState {
 
   const deposit = useCallback(
     async (amountUSDC: string) => {
-      if (!wallet || !publicKey || !lightWasm || !tree) {
+      if (!address || !publicClient || !walletClient || !lightWasm || !tree) {
         setError("Wallet not connected or WASM not loaded");
         return;
       }
@@ -66,15 +61,15 @@ export function useDeposit(): DepositState {
         const amount = parseUSDC(amountUSDC);
         if (amount <= 0) throw new Error("Amount must be greater than 0");
 
-        const mintAddress = USDC_MINT.toBase58();
+        const tokenAddress = USDC_ADDRESS;
 
-        // Get or create ZK keypair for this session
+        // Generate ZK keypair for this deposit
         const zkKeypair = Keypair.generateNew(lightWasm);
 
         // Create UTXOs
         const inputs = [
-          new Utxo({ lightWasm, mintAddress }),
-          new Utxo({ lightWasm, mintAddress }),
+          new Utxo({ lightWasm, tokenAddress }),
+          new Utxo({ lightWasm, tokenAddress }),
         ];
         const outputs = [
           new Utxo({
@@ -82,16 +77,10 @@ export function useDeposit(): DepositState {
             amount,
             keypair: zkKeypair,
             index: tree.nextIndex,
-            mintAddress,
+            tokenAddress,
           }),
-          new Utxo({ lightWasm, amount: 0, mintAddress }),
+          new Utxo({ lightWasm, amount: 0, tokenAddress }),
         ];
-
-        // Get user's token account
-        const signerTokenAccount = await getAssociatedTokenAddress(
-          USDC_MINT,
-          publicKey
-        );
 
         // Build proof
         setStep("proving");
@@ -101,53 +90,29 @@ export function useDeposit(): DepositState {
           tree,
           extAmount: new BN(amount),
           fee: new BN(0),
-          recipient: signerTokenAccount, // For deposits, recipient is self
-          feeRecipient: publicKey,
+          recipient: address,
+          feeRecipient: address,
+          tokenAddress,
         });
 
-        // Create ALT if needed
+        // Approve USDC if needed, then send tx
         setStep("signing");
-        const signAndSend = async (tx: Transaction) => {
-          const sig = await sendTransaction(tx, connection);
-          await connection.confirmTransaction(sig, "confirmed");
-          return sig;
-        };
-        const altAddress = await getOrCreateALT(
-          connection,
-          publicKey,
-          signAndSend
+        await ensureAllowance(
+          publicClient,
+          walletClient,
+          address,
+          BigInt(amount)
         );
 
-        // Build versioned transaction
-        const provider = new AnchorProvider(connection, wallet, {
-          commitment: "confirmed",
-        });
-        const program = getProgram(provider);
-
-        const versionedTx = await buildTransactVersionedTx(
-          connection,
-          program,
+        const hash = await callTransact(
+          publicClient,
+          walletClient,
           proofResult,
-          publicKey,
-          signerTokenAccount,
-          publicKey,
-          signerTokenAccount,
-          altAddress
+          address
         );
 
-        // Send
-        const signature = await sendTransaction(versionedTx, connection);
         setStep("confirming");
-
-        const latestBlockhash = await connection.getLatestBlockhash();
-        await connection.confirmTransaction(
-          {
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            signature,
-          },
-          "confirmed"
-        );
+        await publicClient.waitForTransactionReceipt({ hash });
 
         // Update local state
         insertCommitments(proofResult.outputCommitments);
@@ -159,23 +124,23 @@ export function useDeposit(): DepositState {
           amount: amount.toString(),
           blinding: outputs[0].blinding.toString(),
           keypairPrivkey: zkKeypair.toHex(),
-          index: tree.nextIndex - 2, // Was inserted 2 ago (output0, output1)
-          mintAddress,
+          index: tree.nextIndex - 2,
+          tokenAddress,
           spent: false,
           createdAt: Date.now(),
-          txSignature: signature,
+          txHash: hash,
         };
 
         await addUTXO(storedUtxo);
         await addTransaction({
-          signature,
+          signature: hash,
           type: "deposit",
           amount,
           timestamp: Date.now(),
           utxoIds: [commitment],
         });
 
-        setTxSignature(signature);
+        setTxSignature(hash);
         setStep("done");
       } catch (err: any) {
         setError(err.message || "Deposit failed");
@@ -183,12 +148,11 @@ export function useDeposit(): DepositState {
       }
     },
     [
-      wallet,
-      publicKey,
+      address,
+      publicClient,
+      walletClient,
       lightWasm,
       tree,
-      connection,
-      sendTransaction,
       insertCommitments,
       addUTXO,
       addTransaction,

@@ -2,6 +2,7 @@
 
 import { useUTXOStore } from "@/stores/utxo-store";
 import { formatUSDC, shortenSignature } from "@/lib/utils";
+import { megaethTestnet } from "@/lib/config";
 
 const typeLabels: Record<string, string> = {
   deposit: "DEPOSIT",
@@ -17,6 +18,7 @@ const typeColors: Record<string, string> = {
 
 export function TransactionHistory() {
   const transactions = useUTXOStore((s) => s.transactions);
+  const explorerUrl = megaethTestnet.blockExplorers?.default?.url;
 
   if (transactions.length === 0) {
     return (
@@ -47,14 +49,16 @@ export function TransactionHistory() {
             <span className="text-muted">
               {new Date(tx.timestamp).toLocaleDateString()}
             </span>
-            <a
-              href={`https://explorer.solana.com/tx/${tx.signature}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted hover:text-accent transition-colors"
-            >
-              {shortenSignature(tx.signature)}
-            </a>
+            {explorerUrl && (
+              <a
+                href={`${explorerUrl}/tx/${tx.signature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted hover:text-accent transition-colors"
+              >
+                {shortenSignature(tx.signature)}
+              </a>
+            )}
           </div>
         </div>
       ))}

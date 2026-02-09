@@ -11,23 +11,18 @@
     "setup:artifacts": "mkdir -p public/artifacts && cp ../artifacts/transaction2.wasm public/artifacts/ && cp ../artifacts/transaction2.zkey public/artifacts/"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.31.0",
-    "@ethersproject/sha2": "^5.8.0",
     "@lightprotocol/hasher.rs": "^0.2.1",
-    "@solana/spl-token": "^0.4.14",
-    "@solana/wallet-adapter-base": "^0.9.23",
-    "@solana/wallet-adapter-react": "^0.15.35",
-    "@solana/wallet-adapter-react-ui": "^0.9.35",
-    "@solana/wallet-adapter-wallets": "^0.19.32",
-    "@solana/web3.js": "^1.95.8",
+    "@rainbow-me/rainbowkit": "^2.2.0",
+    "@tanstack/react-query": "^5.62.0",
     "bn.js": "^5.2.2",
-    "borsh": "^2.0.0",
     "ffjavascript": "^0.3.1",
     "idb": "^8.0.1",
     "next": "14.2.21",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "snarkjs": "^0.7.5",
+    "viem": "^2.21.0",
+    "wagmi": "^2.14.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

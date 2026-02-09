@@ -1,187 +1,40 @@
-import { Program, AnchorProvider } from "@coral-xyz/anchor";
-import {
-  PublicKey,
-  SystemProgram,
-  ComputeBudgetProgram,
-  AddressLookupTableProgram,
-  AddressLookupTableAccount,
-  Transaction,
-  VersionedTransaction,
-  TransactionMessage,
-  TransactionInstruction,
-  Connection,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
-} from "@solana/web3.js";
-import {
-  getAssociatedTokenAddress,
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
 import BN from "bn.js";
 import { LightWasm } from "@lightprotocol/hasher.rs";
-
 import {
-  PRIVACY_YIELD_PROGRAM_ID,
-  MOCK_KLEND_PROGRAM_ID,
-  USDC_MINT,
-  POOL_CONFIG_PDA,
-  TREE_ACCOUNT_PDA,
-  KLEND_CONFIG_PDA,
-  POOL_VAULT,
-  POOL_CTOKEN_ACCOUNT,
-  LENDING_MARKET,
-  LENDING_MARKET_AUTHORITY,
-  RESERVE,
-  RESERVE_LIQUIDITY_SUPPLY,
-  RESERVE_COLLATERAL_MINT,
-} from "./config";
-import idl from "./idl/privacy_yield.json";
+  type PublicClient,
+  type WalletClient,
+  type Hash,
+  padHex,
+  numberToHex,
+} from "viem";
+
+import { POOL_ADDRESS, USDC_ADDRESS, POOL_ABI, ERC20_ABI } from "./config";
 import { Utxo } from "./utxo";
 import { MerkleTree } from "./merkle-tree";
 import {
   getExtDataHash,
   getMintAddressField,
-  findNullifierPDAs,
-  findCrossCheckNullifierPDAs,
+  toPublicAmount,
 } from "./utils";
-import {
-  prove,
-  parseProofToBytesArray,
-  parseToBytesArray,
-} from "./prover";
+import { prove, parseProofForSolidity } from "./prover";
 
-// ALT cache
-const ALT_STORAGE_KEY = "privacy-yield-alt-address";
-
-function getCachedALTAddress(): PublicKey | null {
-  if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(ALT_STORAGE_KEY);
-  return stored ? new PublicKey(stored) : null;
-}
-
-function setCachedALTAddress(address: PublicKey) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(ALT_STORAGE_KEY, address.toBase58());
-  }
-}
-
-export function getProgram(provider: AnchorProvider): Program {
-  return new Program(idl as any, provider);
-}
-
-export async function getOrCreateALT(
-  connection: Connection,
-  payer: PublicKey,
-  signAndSendTransaction: (tx: Transaction) => Promise<string>
-): Promise<PublicKey> {
-  // Try cached ALT first
-  const cached = getCachedALTAddress();
-  if (cached) {
-    const account = await connection.getAddressLookupTable(cached);
-    if (account.value) return cached;
-  }
-
-  // Create new ALT
-  const recentSlot = await connection.getSlot("confirmed");
-  const [createIx, lookupTableAddress] =
-    AddressLookupTableProgram.createLookupTable({
-      authority: payer,
-      payer,
-      recentSlot,
-    });
-
-  const createTx = new Transaction().add(createIx);
-  createTx.feePayer = payer;
-  createTx.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash;
-  await signAndSendTransaction(createTx);
-
-  // Wait for slot activation
-  await new Promise((r) => setTimeout(r, 2000));
-
-  // Extend with all needed addresses
-  const addresses = [
-    PRIVACY_YIELD_PROGRAM_ID,
-    TREE_ACCOUNT_PDA,
-    POOL_CONFIG_PDA,
-    POOL_VAULT,
-    USDC_MINT,
-    SystemProgram.programId,
-    ComputeBudgetProgram.programId,
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    KLEND_CONFIG_PDA,
-    POOL_CTOKEN_ACCOUNT,
-    MOCK_KLEND_PROGRAM_ID,
-    RESERVE,
-    LENDING_MARKET,
-    LENDING_MARKET_AUTHORITY,
-    RESERVE_LIQUIDITY_SUPPLY,
-    RESERVE_COLLATERAL_MINT,
-    SYSVAR_INSTRUCTIONS_PUBKEY,
-  ];
-
-  const extendIx = AddressLookupTableProgram.extendLookupTable({
-    payer,
-    authority: payer,
-    lookupTable: lookupTableAddress,
-    addresses,
-  });
-
-  const extendTx = new Transaction().add(extendIx);
-  extendTx.feePayer = payer;
-  extendTx.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash;
-  await signAndSendTransaction(extendTx);
-
-  await new Promise((r) => setTimeout(r, 2000));
-
-  setCachedALTAddress(lookupTableAddress);
-  return lookupTableAddress;
-}
-
-export async function createVersionedTx(
-  connection: Connection,
-  payer: PublicKey,
-  instructions: TransactionInstruction[],
-  altAddress: PublicKey
-): Promise<VersionedTransaction> {
-  const lookupTableAccount =
-    await connection.getAddressLookupTable(altAddress);
-  if (!lookupTableAccount.value)
-    throw new Error("ALT not found: " + altAddress.toBase58());
-
-  const { blockhash } = await connection.getLatestBlockhash();
-  const messageV0 = new TransactionMessage({
-    payerKey: payer,
-    recentBlockhash: blockhash,
-    instructions,
-  }).compileToV0Message([lookupTableAccount.value]);
-
-  return new VersionedTransaction(messageV0);
+export interface SolidityProof {
+  a: [bigint, bigint];
+  b: [[bigint, bigint], [bigint, bigint]];
+  c: [bigint, bigint];
 }
 
 export interface ProofResult {
-  proofToSubmit: {
-    proofA: number[];
-    proofB: number[];
-    proofC: number[];
-    root: number[];
-    publicAmount: number[];
-    extDataHash: number[];
-    inputNullifiers: number[][];
-    outputCommitments: number[][];
-  };
+  proof: SolidityProof;
+  publicSignals: string[];
   extData: {
-    recipient: PublicKey;
+    recipient: string;
     extAmount: BN;
     encryptedOutput1: Uint8Array;
     encryptedOutput2: Uint8Array;
     fee: BN;
-    feeRecipient: PublicKey;
-    mintAddress: PublicKey;
+    feeRecipient: string;
+    tokenAddress: string;
   };
   outputCommitments: string[];
 }
@@ -192,8 +45,9 @@ export async function buildProofInput(params: {
   tree: MerkleTree;
   extAmount: BN;
   fee: BN;
-  recipient: PublicKey;
-  feeRecipient: PublicKey;
+  recipient: string; // EVM address
+  feeRecipient: string; // EVM address
+  tokenAddress: string; // EVM address
 }): Promise<ProofResult> {
   const {
     inputs,
@@ -203,10 +57,10 @@ export async function buildProofInput(params: {
     fee,
     recipient,
     feeRecipient,
+    tokenAddress,
   } = params;
 
-  const mintAddress = USDC_MINT;
-  const mintAddressField = getMintAddressField(mintAddress);
+  const mintAddressField = getMintAddressField(tokenAddress);
 
   const inputMerklePathIndices: number[] = [];
   const inputMerklePathElements: any[] = [];
@@ -234,8 +88,8 @@ export async function buildProofInput(params: {
 
   const root = tree.root();
 
-  const encryptedOutput1 = new TextEncoder().encode("enc_out_1");
-  const encryptedOutput2 = new TextEncoder().encode("enc_out_2");
+  const encryptedOutput1 = new Uint8Array(68).fill(0xaa);
+  const encryptedOutput2 = new Uint8Array(68).fill(0xbb);
 
   const extData = {
     recipient,
@@ -244,14 +98,15 @@ export async function buildProofInput(params: {
     encryptedOutput2,
     fee,
     feeRecipient,
-    mintAddress,
+    tokenAddress,
   };
 
   const calculatedExtDataHash = getExtDataHash(extData);
+  const publicAmount = toPublicAmount(extAmount);
 
   const circuitInput = {
     root,
-    publicAmount: extAmount.toString(),
+    publicAmount,
     extDataHash: calculatedExtDataHash,
     mintAddress: mintAddressField,
     inputNullifier: inputNullifiers,
@@ -267,104 +122,118 @@ export async function buildProofInput(params: {
   };
 
   const { proof, publicSignals } = await prove(circuitInput);
+  const solidityProof = parseProofForSolidity(proof);
 
-  const proofInBytes = parseProofToBytesArray(proof);
-  const inputsInBytes = parseToBytesArray(publicSignals);
-
-  const proofToSubmit = {
-    proofA: proofInBytes.proofA,
-    proofB: proofInBytes.proofB,
-    proofC: proofInBytes.proofC,
-    root: inputsInBytes[0],
-    publicAmount: inputsInBytes[1],
-    extDataHash: inputsInBytes[2],
-    inputNullifiers: [inputsInBytes[3], inputsInBytes[4]],
-    outputCommitments: [inputsInBytes[5], inputsInBytes[6]],
+  return {
+    proof: solidityProof,
+    publicSignals,
+    extData,
+    outputCommitments,
   };
-
-  return { proofToSubmit, extData, outputCommitments };
 }
 
-export async function buildTransactInstruction(
-  program: Program,
-  proofResult: ProofResult,
-  signer: PublicKey,
-  signerTokenAccount: PublicKey,
-  recipientPubkey: PublicKey,
-  recipientTokenAccount: PublicKey
-): Promise<TransactionInstruction[]> {
-  const { proofToSubmit, extData } = proofResult;
+/**
+ * Format proof result into calldata for the Solidity contract.
+ */
+export function formatCalldata(proofResult: ProofResult) {
+  const { proof, publicSignals, extData } = proofResult;
 
-  const { nullifier0PDA, nullifier1PDA } = findNullifierPDAs(
-    program.programId,
-    proofToSubmit
-  );
-  const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(
-    program.programId,
-    proofToSubmit
-  );
+  const root = BigInt(publicSignals[0]);
+  const publicAmount = BigInt(publicSignals[1]);
+  const extDataHash = BigInt(publicSignals[2]);
 
-  const extDataMinified = {
-    extAmount: extData.extAmount,
-    fee: extData.fee,
+  // inputNullifiers must be bytes32 — pad to 32 bytes
+  const inputNullifiers: [`0x${string}`, `0x${string}`] = [
+    padHex(numberToHex(BigInt(publicSignals[3])), { size: 32 }),
+    padHex(numberToHex(BigInt(publicSignals[4])), { size: 32 }),
+  ];
+
+  const outputCommitments: [bigint, bigint] = [
+    BigInt(publicSignals[5]),
+    BigInt(publicSignals[6]),
+  ];
+
+  const extDataForContract = {
+    recipient: extData.recipient as `0x${string}`,
+    extAmount: BigInt(extData.extAmount.toString()),
+    encryptedOutput1: `0x${Buffer.from(extData.encryptedOutput1).toString("hex")}` as `0x${string}`,
+    encryptedOutput2: `0x${Buffer.from(extData.encryptedOutput2).toString("hex")}` as `0x${string}`,
+    fee: BigInt(extData.fee.toString()),
+    feeRecipient: extData.feeRecipient as `0x${string}`,
+    tokenAddress: extData.tokenAddress as `0x${string}`,
   };
 
-  const tx = await (program.methods as any)
-    .transact(
-      proofToSubmit,
-      extDataMinified,
-      Buffer.from(extData.encryptedOutput1),
-      Buffer.from(extData.encryptedOutput2)
-    )
-    .accounts({
-      treeAccount: TREE_ACCOUNT_PDA,
-      nullifier0: nullifier0PDA,
-      nullifier1: nullifier1PDA,
-      nullifier2: nullifier2PDA,
-      nullifier3: nullifier3PDA,
-      poolConfig: POOL_CONFIG_PDA,
-      signer,
-      mint: USDC_MINT,
-      signerTokenAccount,
-      recipient: recipientPubkey,
-      recipientTokenAccount,
-      poolVault: POOL_VAULT,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-    })
-    .transaction();
-
-  return tx.instructions;
+  return {
+    proofA: proof.a,
+    proofB: proof.b,
+    proofC: proof.c,
+    root,
+    publicAmount,
+    extDataHash,
+    inputNullifiers,
+    outputCommitments,
+    extDataForContract,
+  };
 }
 
-export async function buildTransactVersionedTx(
-  connection: Connection,
-  program: Program,
-  proofResult: ProofResult,
-  signer: PublicKey,
-  signerTokenAccount: PublicKey,
-  recipientPubkey: PublicKey,
-  recipientTokenAccount: PublicKey,
-  altAddress: PublicKey
-): Promise<VersionedTransaction> {
-  const instructions = await buildTransactInstruction(
-    program,
-    proofResult,
-    signer,
-    signerTokenAccount,
-    recipientPubkey,
-    recipientTokenAccount
-  );
-
-  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-    units: 1_000_000,
+/**
+ * Ensure ERC-20 allowance is sufficient, approve if not.
+ */
+export async function ensureAllowance(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  owner: `0x${string}`,
+  amount: bigint
+): Promise<void> {
+  const allowance = await publicClient.readContract({
+    address: USDC_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [owner, POOL_ADDRESS],
   });
 
-  return createVersionedTx(
-    connection,
-    signer,
-    [computeBudgetIx, ...instructions],
-    altAddress
-  );
+  if ((allowance as bigint) < amount) {
+    const hash = await walletClient.writeContract({
+      address: USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [POOL_ADDRESS, amount],
+      account: owner,
+      chain: walletClient.chain,
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+  }
+}
+
+/**
+ * Send the transact call to the PrivacyPool contract.
+ */
+export async function callTransact(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  proofResult: ProofResult,
+  account: `0x${string}`
+): Promise<Hash> {
+  const calldata = formatCalldata(proofResult);
+
+  const hash = await walletClient.writeContract({
+    address: POOL_ADDRESS,
+    abi: POOL_ABI,
+    functionName: "transact",
+    args: [
+      calldata.proofA,
+      calldata.proofB,
+      calldata.proofC,
+      calldata.root,
+      calldata.publicAmount,
+      calldata.extDataHash,
+      calldata.inputNullifiers,
+      calldata.outputCommitments,
+      calldata.extDataForContract,
+    ],
+    account,
+    chain: walletClient.chain,
+  });
+
+  return hash;
 }

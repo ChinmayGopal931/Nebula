@@ -9,8 +9,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nebula",
-  description: "Private yield on Solana",
+  title: "Plasma",
+  description: "Private yield on MegaETH",
 };
 
 export default function RootLayout({

@@ -1,18 +1,19 @@
 "use client";
 
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useAccount, useDisconnect } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { shortenAddress } from "@/lib/utils";
 
 export function WalletButton() {
-  const { publicKey, disconnect, connected } = useWallet();
-  const { setVisible } = useWalletModal();
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
 
-  if (connected && publicKey) {
+  if (isConnected && address) {
     return (
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted">
-          {shortenAddress(publicKey.toBase58())}
+          {shortenAddress(address)}
         </span>
         <button
           onClick={() => disconnect()}
@@ -26,7 +27,7 @@ export function WalletButton() {
 
   return (
     <button
-      onClick={() => setVisible(true)}
+      onClick={() => openConnectModal?.()}
       className="px-4 py-2 text-xs bg-accent text-surface-0 hover:bg-accent-hover transition-colors"
     >
       connect wallet
