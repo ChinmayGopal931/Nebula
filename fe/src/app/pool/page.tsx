@@ -24,6 +24,14 @@ export default function PoolPage() {
       <footer className="flex items-center justify-between px-8 py-4 border-t border-border text-xs text-muted">
         <span>{process.env.NEXT_PUBLIC_COMMIT_HASH || "dev"}</span>
         <div className="flex items-center gap-4">
+          <a
+            href="https://x.com/plasmapayapp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted hover:text-accent transition-colors"
+          >
+            [ twitter ]
+          </a>
           <Link
             href="/docs"
             className="text-muted hover:text-accent transition-colors"

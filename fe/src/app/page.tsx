@@ -8,12 +8,12 @@ const CHARS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*!<>{}[]";
 
 const ASCII_LOGO = [
-  "        ██████╗ ██╗      █████╗ ███████╗ ███╗   ███╗   █████╗ ",
-  "        ██╔══██╗██║     ██╔══██╗██╔════╝████╗ ████║ ██╔══██╗",
-  "        ██████╔╝██║     ███████║███████╗██╔████╔██║ ███████║",
-  "        ██╔═══╝ ██║     ██╔══██║╚════██║██║╚██╔╝██║ ██╔══██║",
-  "        ██║     ███████╗██║  ██║ ███████║██║ ╚═╝  ██║  ██║  ██║",
-  "        ╚═╝     ╚══════╝╚═╝  ╚═╝ ╚══════╝╚═╝       ╚═╝  ╚═╝  ╚═╝",
+  "██████╗  ██╗      █████╗ ███████╗███╗   ███╗  █████╗",
+  "██╔══██╗ ██║     ██╔══██╗██╔════╝████╗ ████║ ██╔══██╗",
+  "██████╔╝ ██║     ███████║███████╗██╔████╔██║ ███████║",
+  "██╔═══╝  ██║     ██╔══██║╚════██║██║╚██╔╝██║ ██╔══██║",
+  "██║      ███████╗██║  ██║███████║██║ ╚═╝ ██║ ██║  ██║",
+  "╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝      ╚═╝ ╚═╝  ╚═╝",
 ];
 
 const BOOT_LINES: { text: string; style: string; delay: number }[] = [
@@ -278,7 +278,7 @@ export default function Home() {
             {/* Terminal body */}
             <div className="bg-[#080808] p-6 min-h-[520px] font-mono">
               {showAscii && (
-                <pre className="text-[9px] sm:text-[11px] leading-[1.2] text-accent/70 mb-4 select-none overflow-x-auto w-fit">
+                <pre className="text-[7px] sm:text-[11px] leading-none text-accent/70 mb-4 select-none overflow-x-auto w-fit mx-auto font-['Courier_New'] font-bold">
                   {ASCII_LOGO.join("\n")}
                 </pre>
               )}
@@ -318,9 +318,14 @@ export default function Home() {
 
           <div className="flex items-center justify-between mt-3 text-[10px] text-muted/40 px-1">
             <span>{process.env.NEXT_PUBLIC_COMMIT_HASH || "dev"}</span>
-            <Link href="/docs" className="hover:text-accent transition-colors">
-              how does this work?
-            </Link>
+            <div className="flex items-center gap-3">
+              <a href="https://x.com/plasmapayapp" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
+                twitter
+              </a>
+              <Link href="/docs" className="hover:text-accent transition-colors">
+                how does this work?
+              </Link>
+            </div>
           </div>
         </div>
       </div>

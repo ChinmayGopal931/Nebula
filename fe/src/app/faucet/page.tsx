@@ -7,12 +7,12 @@ import { USDC_ADDRESS, ERC20_ABI } from "@/lib/config";
 import Link from "next/link";
 
 const ASCII_FAUCET = [
-  "    ██╗   ██╗███████╗██████╗  ██████╗",
-  "    ██║   ██║██╔════╝██╔══██╗██╔════╝",
-  "    ██║   ██║███████╗██║  ██║██║     ",
-  "    ██║   ██║╚════██║██║  ██║██║     ",
-  "    ╚██████╔╝███████║██████╔╝╚██████╗",
-  "     ╚═════╝ ╚══════╝╚═════╝  ╚═════╝",
+  "    ██╗   ██╗███████╗██████╗   ██████╗",
+  "    ██║   ██║██╔════╝██╔══██╗ ██╔════╝",
+  "    ██║   ██║███████╗██║   ██║ ██║     ",
+  "    ██║   ██║╚════██║██║   ██║ ██║     ",
+  "     ╚█████╔╝███████║██████╝  ██████╗",
+  "     ╚═════╝ ╚══════╝╚═════╝   ╚═════╝",
 ];
 
 type Step = "address" | "amount" | "confirm" | "minting" | "done";
@@ -83,7 +83,10 @@ export default function FaucetPage() {
           args: [recipientAddress as `0x${string}`, amountRaw],
         });
 
-        addLine(`[OK] tx submitted: ${hash.slice(0, 10)}...${hash.slice(-8)}`, "text-green-500");
+        addLine(
+          `[OK] tx submitted: ${hash.slice(0, 10)}...${hash.slice(-8)}`,
+          "text-green-500",
+        );
         addLine("waiting for confirmation...", "text-muted");
 
         await publicClient!.waitForTransactionReceipt({ hash });
@@ -93,7 +96,7 @@ export default function FaucetPage() {
         addLine("", "");
         addLine(
           `${parseFloat(amount).toLocaleString()} USDC minted to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
-          "text-accent font-bold"
+          "text-accent font-bold",
         );
         addLine("", "");
         setStep("done");
@@ -108,7 +111,7 @@ export default function FaucetPage() {
         setStep("confirm");
       }
     },
-    [amount, recipientAddress, publicClient, addLine]
+    [amount, recipientAddress, publicClient, addLine],
   );
 
   // Auto-execute mint when wallet connects after pending
@@ -128,13 +131,19 @@ export default function FaucetPage() {
       if (step === "address") {
         if (!val.match(/^0x[a-fA-F0-9]{40}$/)) {
           addLine(`> ${val}`, "text-white");
-          addLine("[ERR] invalid address — must be 0x... (40 hex chars)", "text-red-500");
+          addLine(
+            "[ERR] invalid address — must be 0x... (40 hex chars)",
+            "text-red-500",
+          );
           setInputValue("");
           return;
         }
         addLine(`> ${val}`, "text-white");
         setRecipientAddress(val);
-        addLine(`[OK] recipient: ${val.slice(0, 6)}...${val.slice(-4)}`, "text-green-500");
+        addLine(
+          `[OK] recipient: ${val.slice(0, 6)}...${val.slice(-4)}`,
+          "text-green-500",
+        );
         addLine("", "");
         setInputValue("1000");
         setStep("amount");
@@ -145,7 +154,10 @@ export default function FaucetPage() {
         const num = parseFloat(val);
         if (isNaN(num) || num <= 0 || num > 100000) {
           addLine(`> ${val}`, "text-white");
-          addLine("[ERR] amount must be between 0 and 100,000 USDC", "text-red-500");
+          addLine(
+            "[ERR] amount must be between 0 and 100,000 USDC",
+            "text-red-500",
+          );
           setInputValue("");
           return;
         }
@@ -155,7 +167,7 @@ export default function FaucetPage() {
         addLine("", "");
         addLine(
           `mint ${num.toLocaleString()} USDC to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}?`,
-          "text-muted"
+          "text-muted",
         );
         setInputValue("y");
         setStep("confirm");
@@ -196,13 +208,24 @@ export default function FaucetPage() {
         setTxHash("");
         setHistory([
           { text: "PLASMA testnet USDC faucet", style: "text-accent" },
-          { text: "mint test tokens for the privacy pool", style: "text-muted" },
+          {
+            text: "mint test tokens for the privacy pool",
+            style: "text-muted",
+          },
           { text: "", style: "" },
         ]);
         setStep("address");
       }
     },
-    [step, inputValue, recipientAddress, walletClient, openConnectModal, executeMint, addLine]
+    [
+      step,
+      inputValue,
+      recipientAddress,
+      walletClient,
+      openConnectModal,
+      executeMint,
+      addLine,
+    ],
   );
 
   const getPrompt = () => {
@@ -261,8 +284,13 @@ export default function FaucetPage() {
 
               {/* Active input */}
               {step !== "minting" && (
-                <form onSubmit={handleSubmit} className="flex items-center gap-2">
-                  <span className="text-xs text-muted shrink-0">{getPrompt()}</span>
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex items-center gap-2"
+                >
+                  <span className="text-xs text-muted shrink-0">
+                    {getPrompt()}
+                  </span>
                   <input
                     ref={inputRef}
                     type="text"
@@ -277,7 +305,9 @@ export default function FaucetPage() {
 
               {step === "minting" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted animate-pulse">processing...</span>
+                  <span className="text-xs text-muted animate-pulse">
+                    processing...
+                  </span>
                 </div>
               )}
 
