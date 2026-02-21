@@ -8,9 +8,20 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+const siteName = "Plasma";
+const siteDescription = "Private yield on Solana. Shielded USDC pool powered by zero-knowledge proofs and Kamino lending.";
+
 export const metadata: Metadata = {
-  title: "Nebula",
-  description: "Private yield on Solana",
+  title: {
+    default: "Plasma — Private Yield on Solana",
+    template: "%s | Plasma",
+  },
+  description: siteDescription,
+  keywords: ["privacy", "USDC", "yield", "Solana", "ZK", "zero-knowledge", "shielded", "Kamino", "DeFi", "pool"],
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
